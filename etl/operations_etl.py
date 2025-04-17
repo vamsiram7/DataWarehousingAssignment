@@ -11,7 +11,7 @@ def clean_operations_data():
     print("Reading raw Operations data...")
     df = pd.read_excel(INPUT_PATH)
 
-    # Clean string fields
+    # Standardize string fields
     print("Standardizing text columns...")
     df['ProcessName'] = df['ProcessName'].astype(str).str.strip().str.upper()
     df['Department'] = df['Department'].astype(str).str.strip().str.upper()
@@ -19,21 +19,18 @@ def clean_operations_data():
 
     # Handle missing values
     print("Handling missing values...")
-    df.dropna(subset=['ProcessName', 'Downtime(in minutes)', 'ProcessDate'], inplace=True)
+    df.dropna(subset=['ProcessName', 'DowntimeHours', 'ProcessDate'], inplace=True)
 
-    # Convert date
+    # Convert ProcessDate
     print("Formatting ProcessDate...")
     df['ProcessDate'] = pd.to_datetime(df['ProcessDate'], errors='coerce')
     df = df[~df['ProcessDate'].isnull()]
-
-    # Convert downtime from minutes to float (hours)
-    df['DowntimeHours'] = df['Downtime(in minutes)'] / 60.0
 
     # Remove duplicates
     df.drop_duplicates(inplace=True)
 
     # Create Dim_Process
-    print("Creating Dim_Process...")
+    print("Creating Dim_Process table...")
     dim_process = df[['ProcessName', 'Location']].drop_duplicates().reset_index(drop=True)
     dim_process['ProcessID'] = range(1, len(dim_process) + 1)
 
@@ -41,13 +38,13 @@ def clean_operations_data():
     df = df.merge(dim_process, how='left', on=['ProcessName', 'Location'])
 
     # Create Fact_Operations
-    print("Creating Fact_Operations...")
+    print("Creating Fact_Operations table...")
     fact_operations = df[['Department', 'ProcessID', 'DowntimeHours', 'ProcessDate']].copy()
     fact_operations['DateKey'] = fact_operations['ProcessDate'].dt.strftime('%Y%m%d').astype(int)
     fact_operations.drop(columns='ProcessDate', inplace=True)
 
     # Export
-    print("Saving cleaned outputs to /outputs/ directory...")
+    print("Saving outputs to /outputs/...")
     dim_process.to_csv(OUTPUT_PROCESS, index=False)
     fact_operations.to_csv(OUTPUT_FACT_OPERATIONS, index=False)
 
