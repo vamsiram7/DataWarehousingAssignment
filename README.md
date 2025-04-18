@@ -76,11 +76,13 @@ Views are defined inside: `sql/role_views.sql`
 ```bash
 git clone https://github.com/vamsiram7DataWarehousingAssignment.git
 cd DataWarehousingAssignment
+```
 
 ### 2. Install required Python packages
 
 ```bash
 pip install pandas openpyxl jupyter
+```
 
 ### 3. Run ETL scripts.
 
@@ -88,23 +90,26 @@ pip install pandas openpyxl jupyter
 python etl/hr_etl.py
 python etl/finance_etl.py
 python etl/operations_etl.py
+```
 
 ### 4. Load cleaned data into SQLite
 
 ```bash
 python sql/load_to_sqlite.py
+```
 
 ### 5. Create role-based SQL views
 
 ```bash
 python sql/create_views.py
+```
 
 ### 6. Run bonus features
 
 ```bash
 python etl/scd2_employee_etl.py
 python etl/incremental_fact_finance_etl.py
-
+```
 
 ### 7. Launch KPI and audit log notebooks
 
@@ -112,11 +117,11 @@ python etl/incremental_fact_finance_etl.py
 jupyter notebook
 
 Then open:
-
 notebooks/hr_kpi.ipynb
 notebooks/finance_kpi.ipynb
 notebooks/operations_kpi.ipynb
 notebooks/view_audit_log.ipynb
+```
 
 
 
