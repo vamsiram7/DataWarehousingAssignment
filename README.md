@@ -77,7 +77,8 @@ Views are defined inside: `sql/role_views.sql`
 git clone https://github.com/vamsiram7DataWarehousingAssignment.git
 cd DataWarehousingAssignment
 
+### 2. Install Required Python Packages
 
-
-
+```bash
+pip install pandas openpyxl jupyter
 
