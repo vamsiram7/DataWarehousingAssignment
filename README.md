@@ -16,6 +16,7 @@ This is an end-to-end data warehousing project that consolidates HR, Finance, an
 
 ## Project Folder Structure
 
+```
 organizational-insights-data-warehouse/
 ├── data/           # Raw Excel files
 ├── outputs/        # Cleaned CSV files (facts and dimensions)
@@ -24,7 +25,7 @@ organizational-insights-data-warehouse/
 ├── notebooks/      # KPI and log analysis notebooks
 ├── docs/           # Optional: schema diagrams or descriptions
 └── README.md       # Project documentation
-
+```
 
 ##
 ![Star Schema Diagram](docs/schema_diagram.png)
