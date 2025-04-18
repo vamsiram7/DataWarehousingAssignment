@@ -69,7 +69,7 @@ Views are defined inside: `sql/role_views.sql`
 | Audit Log Viewer    | `notebooks/view_audit_log.ipynb`          | Shows audit history inside a Jupyter notebook       |
 
 
-## 🛠️ Setup Instructions
+## Setup Instructions
 
 ### 1. Clone the repository
 
@@ -122,8 +122,4 @@ notebooks/finance_kpi.ipynb
 notebooks/operations_kpi.ipynb
 notebooks/view_audit_log.ipynb
 ```
-
-
-
-
 
