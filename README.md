@@ -18,6 +18,10 @@ This is an end-to-end data warehousing project that consolidates HR, Finance, an
 
 organizational-insights-data-warehouse/ ├── data/ # Raw Excel files ├── outputs/ # Cleaned CSV files (facts and dimensions) ├── etl/ # ETL, SCD, and incremental scripts ├── sql/ # SQL view and load scripts ├── notebooks/ # KPI and log analysis notebooks ├── docs/ # Optional: schema diagrams or descriptions └── README.md # Project documentation
 
+##
+![Star Schema Diagram](docs/schema_diagram.png)
+
+
 ## ETL Pipelines Overview
 
 Each business area has its own ETL script that performs data cleaning, transformation, and loading into star schema format.
