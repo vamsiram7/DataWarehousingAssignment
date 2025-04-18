@@ -81,7 +81,7 @@ cd DataWarehousingAssignment
 ### 2. Install required Python packages
 
 ```bash
-pip install pandas openpyxl jupyter
+pip install -r requirements.txt
 ```
 
 ### 3. Run ETL scripts.
