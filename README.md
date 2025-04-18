@@ -69,7 +69,7 @@ Views are defined inside: `sql/role_views.sql`
 | Audit Log Viewer    | `notebooks/view_audit_log.ipynb`          | Shows audit history inside a Jupyter notebook       |
 
 
-## 🛠️ Setup Instructions
+## Setup Instructions
 
 ### 1. Clone the repository
 
@@ -77,6 +77,7 @@ Views are defined inside: `sql/role_views.sql`
 git clone https://github.com/vamsiram7DataWarehousingAssignment.git
 cd DataWarehousingAssignment
 
+**###**
 ### 2. Install required Python packages
 
 ```bash
