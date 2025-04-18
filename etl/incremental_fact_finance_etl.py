@@ -1,5 +1,6 @@
 import pandas as pd
 import sqlite3
+from etl.audit_logger import log_etl_run
 
 DB_PATH = "sql/organizational_insights.db"
 INPUT_PATH = "outputs/fact_finance.csv"
@@ -38,7 +39,8 @@ def apply_incremental_load():
     # Insert new rows
     if not final_new_data.empty:
         final_new_data.to_sql(TABLE_NAME, conn, if_exists='append', index=False)
-        print(f"✅ Inserted {len(final_new_data)} new rows into {TABLE_NAME}.")
+        log_etl_run(TABLE_NAME, "incremental_load", len(final_new_data))
+        print(f"Inserted {len(final_new_data)} new rows into {TABLE_NAME}.")
     else:
         print("No new data to insert.")
 
