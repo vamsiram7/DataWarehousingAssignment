@@ -1,6 +1,6 @@
 import pandas as pd
 import sqlite3
-from etl.audit_logger import log_etl_run
+from audit_logger import log_etl_run
 
 DB_PATH = "sql/organizational_insights.db"
 INPUT_PATH = "outputs/fact_finance.csv"
