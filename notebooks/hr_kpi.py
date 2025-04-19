@@ -7,8 +7,8 @@
 import pandas as pd
 
 # Load cleaned data
-fact_hr = pd.read_csv('../outputs/fact_hr.csv')
-dim_employee = pd.read_csv('../outputs/dim_employee.csv')
+fact_hr = pd.read_csv('outputs/fact_hr.csv')
+dim_employee = pd.read_csv('outputs/dim_employee.csv')
 
 # Merge to enrich fact_hr with gender
 hr = fact_hr.merge(dim_employee, on='EmployeeID', how='left')

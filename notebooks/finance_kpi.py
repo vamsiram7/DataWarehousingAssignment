@@ -7,8 +7,8 @@
 import pandas as pd
 
 # Load data
-fact_fin = pd.read_csv('../outputs/fact_finance.csv')
-dim_exp = pd.read_csv('../outputs/dim_expensetype.csv')
+fact_fin = pd.read_csv('outputs/fact_finance.csv')
+dim_exp = pd.read_csv('outputs/dim_expensetype.csv')
 
 # Merge for ExpenseType
 finance = fact_fin.merge(dim_exp, on='ExpenseTypeID', how='left')

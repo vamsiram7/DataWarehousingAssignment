@@ -7,8 +7,8 @@
 import pandas as pd
 
 # Load data
-fact_ops = pd.read_csv('../outputs/fact_operations.csv')
-dim_proc = pd.read_csv('../outputs/dim_process.csv')
+fact_ops = pd.read_csv('outputs/fact_operations.csv')
+dim_proc = pd.read_csv('outputs/dim_process.csv')
 
 # Merge process info
 ops = fact_ops.merge(dim_proc, on='ProcessID', how='left')

@@ -1,3 +1,7 @@
 DepartmentName,DepartmentID
-HR,1
-IT,2
+IT,1
+NAN,2
+OPERATIONS,3
+HR,4
+MARKETING,5
+FINANCE,6
