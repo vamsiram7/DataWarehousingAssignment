@@ -42,7 +42,7 @@ All cleaned CSVs are saved in the `/outputs/` folder and loaded into the MySQL d
 
 ## KPI Metrics Summary
 
-Key business metrics were computed `.py` scripts — located in the `notebooks/` folder.
+Key business metrics were computed using `.py` scripts — located in the `notebooks/` folder.
 
 | Domain     | KPIs Generated                                              |
 |------------|-------------------------------------------------------------|
@@ -84,15 +84,15 @@ cd DataWarehousingAssignment
 ### 2. Prerequisites
 - Python 3.12
 - MySQL Server
-- 
+
 ### 3. Install required Python packages
 
 ```bash
 pip install -r requirements.txt
 ```
 ### 4. Setting Up MySQL
-4.1. Install MySQL Server and ensure it is running.
-4.2. Update the MySQL credentials in `sql/db_config.ini`:
+- Install MySQL Server and ensure it is running.
+- Update the MySQL credentials in `sql/db_config.ini`:
    ```ini
    [mysql]
    host = localhost
@@ -204,7 +204,7 @@ python notebooks/hr_kpi.py
 python notebooks/finance_kpi.py
 python notebooks/operations_kpi.py
 ```
-### 6.4. Create Views
+### 6.4. Create Role Based Views
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
@@ -216,7 +216,7 @@ To apply SCD Type 2 logic for employee data run the following script:
 ```bash
 python etl/scd2_employee_etl.py
 ```
-To access the SCD2 data run the following script:
+To access the SCD Type2 data run the following script:
 ```bash
 python notebooks/scd2.py
 ```
