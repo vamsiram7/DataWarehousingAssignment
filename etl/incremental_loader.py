@@ -1,7 +1,6 @@
 import pandas as pd
 import mysql.connector
 import configparser
-from audit_logger import log_etl_run
 
 # Load MySQL config
 config = configparser.ConfigParser()
@@ -57,7 +56,6 @@ def apply_incremental_load(input_path, table_name, key_columns):
             insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
             cursor.execute(insert_query, tuple(row))
         conn.commit()
-        log_etl_run(table_name, "incremental_load", len(final_new_data))
         print(f"Inserted {len(final_new_data)} new rows into {table_name}.")
     else:
         print(f"No new data to insert into {table_name}.")

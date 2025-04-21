@@ -1,20 +1,10 @@
 import pandas as pd
-import os
 from datetime import datetime
-import mysql.connector
 
 # File paths
 INPUT_PATH = "./data/Operations_Dataset_Dirty.xlsx"
 OUTPUT_PROCESS = "./outputs/dim_process.csv"
 OUTPUT_FACT_OPERATIONS = "./outputs/fact_operations.csv"
-
-# MySQL connection details
-MYSQL_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "Adavi@14",
-    "database": "organizational_insights"
-}
 
 def clean_operations_data():
     df = pd.read_excel(INPUT_PATH)
@@ -27,13 +17,13 @@ def clean_operations_data():
     # Handle missing values
     df.dropna(subset=['ProcessName', 'DowntimeHours', 'ProcessDate'], inplace=True)
 
-    # Change the Date Format
+    # Parse dates
     def parse_dates(date_str):
         try:
-            return pd.to_datetime(date_str)  # First try standard ISO
+            return pd.to_datetime(date_str)
         except:
             try:
-                return pd.to_datetime(date_str, dayfirst=True)  # Then try dayfirst
+                return pd.to_datetime(date_str, dayfirst=True)
             except:
                 return pd.NaT
 
@@ -56,44 +46,12 @@ def clean_operations_data():
     fact_operations.drop(columns='ProcessDate', inplace=True)
 
     # Export
-    print("Saving outputs to /outputs/...")
+    print("Saving outputs to /outputs/ directory...")
     dim_process.to_csv(OUTPUT_PROCESS, index=False)
     fact_operations.to_csv(OUTPUT_FACT_OPERATIONS, index=False)
 
     print("Operations ETL complete.")
 
-def load_to_mysql(dim_process, fact_operations):
-    """Load the cleaned data into MySQL tables."""
-    conn = mysql.connector.connect(**MYSQL_CONFIG)
-    cursor = conn.cursor()
-
-    # Load Dim_Process
-    cursor.execute("TRUNCATE TABLE dim_process")
-    for _, row in dim_process.iterrows():
-        cursor.execute(
-            "INSERT INTO dim_process (ProcessName, Location, ProcessID) VALUES (%s, %s, %s)",
-            (row['ProcessName'], row['Location'], row['ProcessID'])
-        )
-
-    # Load Fact_Operations
-    cursor.execute("TRUNCATE TABLE fact_operations")
-    for _, row in fact_operations.iterrows():
-        cursor.execute(
-            "INSERT INTO fact_operations (Department, ProcessID, DowntimeHours, DateKey) VALUES (%s, %s, %s, %s)",
-            (row['Department'], row['ProcessID'], row['DowntimeHours'], row['DateKey'])
-        )
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
 if __name__ == "__main__":
     clean_operations_data()
 
-    # Load cleaned data into MySQL
-    dim_process = pd.read_csv(OUTPUT_PROCESS)
-    fact_operations = pd.read_csv(OUTPUT_FACT_OPERATIONS)
-
-    print("Loading data into MySQL...")
-    load_to_mysql(dim_process, fact_operations)
-    print("Data successfully loaded into MySQL.")

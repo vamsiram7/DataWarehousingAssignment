@@ -2,19 +2,24 @@ import mysql.connector
 import json
 import os
 import configparser
+import getpass
+import pandas as pd
 
-def get_user_role(username):
-    """Fetch the role of a user from the roles configuration."""
+def get_user_credentials(username, password):
+    """Validate user credentials and return role if valid."""
     with open("sql/roles_config.json", "r") as f:
         roles_config = json.load(f)
-    return roles_config.get(username, "guest")
 
-# Get MySQL connection details from config file
+    user = roles_config.get(username)
+    if user and user["password"] == password:
+        return user["role"]
+    return None
+
 def get_mysql_config():
+    """Fetch MySQL connection info from db_config.ini"""
     config = configparser.ConfigParser()
     config_path = "sql/db_config.ini"
-    
-    # Check if config file exists, otherwise use default credentials
+
     if os.path.exists(config_path):
         config.read(config_path)
         return {
@@ -37,6 +42,7 @@ if __name__ == "__main__":
     conn = mysql.connector.connect(**mysql_config)
     cursor = conn.cursor()
 
+    # Create SQL views if not already created
     with open("sql/role_views.sql", "r") as f:
         sql_script = f.read()
 
@@ -50,8 +56,11 @@ if __name__ == "__main__":
 
     print("SQL views for role-based access created in MySQL.")
 
+    # Prompt for user credentials
     username = input("Enter your username: ")
-    role = get_user_role(username)
+    password = getpass.getpass("Enter your password: ")
+
+    role = get_user_credentials(username, password)
 
     if role == "HR":
         print("Accessing HR data...")
@@ -74,6 +83,6 @@ if __name__ == "__main__":
         cursor = conn.cursor()
         cursor.execute(query)
         results = cursor.fetchall()
-        for row in results:
-            print(row)
+        df = pd.DataFrame(results, columns=[desc[0] for desc in cursor.description])
+        print(df)
         conn.close()
