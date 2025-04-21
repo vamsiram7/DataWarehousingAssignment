@@ -24,10 +24,6 @@ organizational-insights-data-warehouse/
 └── README.md       # Project documentation
 ```
 
-## Star Schema Diagram
-![Star Schema Diagram](docs/schema_diagram.png)
-
-
 ## ETL Pipelines Overview
 
 Each business area has its own ETL script that performs data cleaning, transformation, and loading into star schema format.
@@ -39,6 +35,9 @@ Each business area has its own ETL script that performs data cleaning, transform
 | Operations | `etl/operations_etl.py` | `fact_operations` | `dim_process`                            |
 
 All cleaned CSVs are saved in the `/outputs/` folder and loaded into the MySQL database using `sql/load_to_mysql.py`.
+
+## Star Schema Diagram
+![Star Schema Diagram](docs/schema_diagram.png)
 
 ## KPI Metrics Summary
 
