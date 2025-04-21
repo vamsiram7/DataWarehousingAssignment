@@ -113,13 +113,9 @@ cd DataWarehousingAssignment
 ```bash
 pip install -r requirements.txt
 ```
-### 2. Setting Up MySQL
-1. Install MySQL Server and ensure it is running.
-2. Create a database named `organizational_insights`:
-   ```sql
-   CREATE DATABASE organizational_insights;
-   ```
-3. Update the MySQL credentials in `sql/db_config.ini`:
+### 4. Setting Up MySQL
+4.1. Install MySQL Server and ensure it is running.
+4.2. Update the MySQL credentials in `sql/db_config.ini`:
    ```ini
    [mysql]
    host = localhost
@@ -128,14 +124,7 @@ pip install -r requirements.txt
    database = organizational_insights
    ```
 
-### 3. Install Python Dependencies
-Activate the virtual environment and install the required packages:
-```bash
-source vamenv/bin/activate
-pip install -r requirements.txt
-```
-
-## 4. Setting Up MySQL Locally and MySQL Workbench
+## 5. Setting Up MySQL Locally and MySQL Workbench
 
 ### For macOS
 
@@ -167,13 +156,7 @@ pip install -r requirements.txt
      ```
    - Enter the password you set during the secure installation process.
 
-5. **Create a Database**:
-   - Create a new database for your project:
-     ```sql
-     CREATE DATABASE organizational_insights;
-     ```
-
-6. **Install MySQL Workbench**:
+5. **Install MySQL Workbench**:
    - Download MySQL Workbench from the [official website](https://dev.mysql.com/downloads/workbench/).
    - Open the downloaded `.dmg` file and follow the installation instructions.
    - Connect to your MySQL server using `localhost`, port `3306`, and the root credentials.
@@ -207,11 +190,6 @@ pip install -r requirements.txt
      ```
    - Enter the password you set during the secure installation process.
 
-5. **Create a Database**:
-   - Create a new database for your project:
-     ```sql
-     CREATE DATABASE organizational_insights;
-
 5. **Install MySQL Workbench**:
    - If not installed during the MySQL setup, download it from the [official website](https://dev.mysql.com/downloads/workbench/).
    - Install and open MySQL Workbench.
@@ -227,21 +205,21 @@ pip install -r requirements.txt
   ```
 - Use MySQL Workbench to visually inspect your database and verify the data loaded by your ETL scripts.
 
-## 5. Workflow Execution
+## 6. Workflow Execution
 
-### 1. Run ETL scripts.
+### 6.1. Run ETL scripts.
 Run the following ETL scripts to get cleaned fact and dimension tables:
 ```bash
 python etl/hr_etl.py
 python etl/finance_etl.py
 python etl/operations_etl.py
 ```
-### 2. Load cleaned data into MySQL
+### 6.2. Load cleaned data into MySQL
 Run the following script to load the cleaned data into MySQL:
 ```bash
 python sql/load_to_mysql.py
 ```
-### 3. Launch KPI
+### 6.3. Launch KPI
 You can view KPIs by running the following Python scripts:
 
 ```bash
@@ -249,21 +227,25 @@ python notebooks/hr_kpi.py
 python notebooks/finance_kpi.py
 python notebooks/operations_kpi.py
 ```
-### 4. Create Views
+### 6.4. Create Views
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
 ```
-### 5. Run Bonus Features
+### 6.5. Run Bonus Features
 
-#### SCD Type 2 for Employee Data
-To apply SCD Type 2 logic for employee data:
+#### 6.5.1. SCD Type 2 for Employee Data
+To apply SCD Type 2 logic for employee data run the following script:
 ```bash
 python etl/scd2_employee_etl.py
 ```
-#### Incremental Loading
+To access the SCD2 data run the following script:
+```bash
+python notebooks/scd2.py
+```
+#### 6.5.2 Incremental Loading
 To load new data incrementally into all supported tables::
-1. Add new records to
+1. Add new records to any of the following
    `outputs/fact_finance.csv`
    `outputs/fact_hr.csv`
    `outputs/fact_operations.csv`
