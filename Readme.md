@@ -57,7 +57,7 @@ This project simulates access control by creating SQL views for each user role i
 
 | Role         | SQL View Name          | Access Permissions                              |
 |--------------|------------------------|-------------------------------------------------|
-| HR Analyst   | `view_hr_user`         | Employee data, salary, headcount, attrition     |
+| HR User      | `view_hr_user`         | Employee data, salary, headcount, attrition     |
 | Finance User | `view_finance_user`    | Expense types, amounts, dates                   |
 | Super User   | All views/tables       | Full access to all business domains             |
 
