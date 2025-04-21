@@ -9,8 +9,7 @@ This project implements a data warehousing solution for organizational insights.
 - **MySQL** (data warehouse simulation)
 - **Jupyter Notebooks** (KPI analysis)
 - **SQL** (views, filters, role-based access)
-- **GitHub** (version control and project showcase)
-- 
+- **GitHub** (version control and project showcase) 
 ---
 
 ## Project Folder Structure
