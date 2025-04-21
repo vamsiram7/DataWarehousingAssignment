@@ -23,22 +23,26 @@ def apply_incremental_load(input_path, table_name, key_columns):
         cursor.execute(f"SELECT * FROM {table_name}")
         existing_data = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
     except:
-        print(f"No existing table found. Inserting all rows into {table_name}...")
+        print(f"[INFO] No existing table found. Inserting ALL rows into '{table_name}'...")
         for _, row in new_data.iterrows():
             placeholders = ", ".join(["%s"] * len(row))
             columns = ", ".join(new_data.columns)
             insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
             cursor.execute(insert_query, tuple(row))
         conn.commit()
+        print(f"[INSERTED] {len(new_data)} rows into '{table_name}':")
+        print(new_data)
         conn.close()
         return
 
+    # Align data types if possible
     for col in key_columns:
         try:
             new_data[col] = new_data[col].astype(existing_data[col].dtype)
         except:
             continue
 
+    # Find only new rows by comparing key columns
     merged = new_data.merge(
         existing_data,
         on=key_columns,
@@ -56,9 +60,10 @@ def apply_incremental_load(input_path, table_name, key_columns):
             insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
             cursor.execute(insert_query, tuple(row))
         conn.commit()
-        print(f"Inserted {len(final_new_data)} new rows into {table_name}.")
+        print(f"[INSERTED] {len(final_new_data)} new rows into '{table_name}':")
+        print(final_new_data.to_string(index=False))
     else:
-        print(f"No new data to insert into {table_name}.")
+        print(f"[SKIPPED] No new data to insert into '{table_name}'.")
 
     conn.close()
 

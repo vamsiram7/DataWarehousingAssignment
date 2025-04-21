@@ -17,11 +17,10 @@ DB_CONFIG = {
 INPUT_PATH = "outputs/dim_employee.csv"
 TABLE_NAME = "dim_employee_scd2"
 
-# --- Initialize SCD2 Table (drop + create cleanly) ---
+# --- Initialize SCD2 Table ---
 def initialize_scd2_table(cursor):
-    cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
     cursor.execute(f"""
-        CREATE TABLE {TABLE_NAME} (
+        CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             EmployeeID INTEGER,
             Name TEXT,
             Gender TEXT,
@@ -40,24 +39,22 @@ def apply_scd2(cursor):
     dim_employee = pd.read_csv("outputs/dim_employee.csv")
     fact_hr = pd.read_csv("outputs/fact_hr.csv")
 
-    # # Debugging: Print column names of both datasets
-    # print("dim_employee columns:", dim_employee.columns)
-    # print("fact_hr columns:", fact_hr.columns)
+    # Convert DateOfJoining to standard YYYY-MM-DD format
+    dim_employee['DateOfJoining'] = pd.to_datetime(dim_employee['DateOfJoining'], errors='coerce')
+    dim_employee['DateOfJoining'] = dim_employee['DateOfJoining'].dt.strftime('%Y-%m-%d')
 
-    # Ensure the Status column exists in fact_hr
     if 'Status' not in fact_hr.columns:
         raise ValueError("The 'Status' column is missing in fact_hr.csv")
 
-    # Merge dim_employee with fact_hr to include the Status column
+    # Merge to bring in Status
     merged_df = dim_employee.merge(fact_hr[['EmployeeID', 'Status']], on='EmployeeID', how='left')
 
-
-    # Add StartDate, EndDate, and IsCurrent columns
+    # Add required columns
     merged_df['StartDate'] = merged_df['DateOfJoining']
     merged_df['EndDate'] = None
     merged_df['IsCurrent'] = merged_df['Status'].apply(lambda x: 1 if x == "Active" else 0)
 
-    # Fetch existing data from the SCD-2 table
+    # Fetch existing SCD2 data
     cursor.execute(f"SELECT * FROM {TABLE_NAME}")
     existing_data = cursor.fetchall()
     existing_columns = [desc[0] for desc in cursor.description]
@@ -67,7 +64,7 @@ def apply_scd2(cursor):
 
     for _, new_row in merged_df.iterrows():
         matched = existing_df[
-            (existing_df['EmployeeID'] == new_row['EmployeeID']) &
+            (existing_df['EmployeeID'] == new_row['EmployeeID']) & 
             (existing_df['IsCurrent'] == 1)
         ]
 
@@ -75,7 +72,6 @@ def apply_scd2(cursor):
             inserts.append(new_row)
         else:
             for _, current in matched.iterrows():
-                # Check for any change
                 if (
                     current['Name'] != new_row['Name'] or
                     current['Gender'] != new_row['Gender'] or
@@ -83,7 +79,7 @@ def apply_scd2(cursor):
                     current['DateOfJoining'] != new_row['DateOfJoining'] or
                     current['IsCurrent'] != new_row['IsCurrent']
                 ):
-                    # Expire current
+                    # Expire current row
                     cursor.execute(f"""
                         UPDATE {TABLE_NAME}
                         SET EndDate = %s, IsCurrent = 0
@@ -91,7 +87,7 @@ def apply_scd2(cursor):
                     """, (datetime.today().strftime('%Y-%m-%d'), new_row['EmployeeID']))
                     inserts.append(new_row)
 
-    # Insert new versions
+    # Insert updated records
     if inserts:
         for _, row in pd.DataFrame(inserts).iterrows():
             placeholders = ", ".join(["%s"] * len(row))
