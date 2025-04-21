@@ -244,7 +244,7 @@ To access the SCD2 data run the following script:
 python notebooks/scd2.py
 ```
 #### 6.5.2. Incremental Loading
-To load new data incrementally into all supported tables::
+To load new data incrementally into all supported tables:
 1. Add new records to any of the following
    `outputs/fact_finance.csv`
    `outputs/fact_hr.csv`
