@@ -53,28 +53,6 @@ Key business metrics were computed using both `.ipynb` notebooks and `.py` scrip
 
 ---
 
-## Data Flow Diagram
-
-Below is the data flow diagram that illustrates the ETL process and how data moves through the system:
-
-```mermaid
-graph TD
-    A[Raw Data (Excel Files)] -->|Extract| B[ETL Scripts]
-    B -->|Transform| C[Cleaned CSVs (Outputs)]
-    C -->|Load| D[MySQL Database]
-    D -->|Views| E[Role-Based SQL Views]
-    E -->|Access| F[Business Users]
-    F -->|Analyze| G[Jupyter Notebooks]
-```
-
-### Explanation:
-1. **Raw Data**: The raw datasets are stored in Excel files in the `data/` directory.
-2. **ETL Scripts**: Python scripts in the `etl/` directory extract, clean, and transform the data.
-3. **Cleaned CSVs**: The transformed data is saved as CSV files in the `outputs/` directory.
-4. **MySQL Database**: The cleaned data is loaded into a MySQL database.
-5. **Role-Based SQL Views**: SQL views are created to provide role-specific access to the data.
-6. **Business Users**: Users access the data through the views.
-
 ## Role-Based Access (Simulated Using SQL Views)
 
 This project simulates access control by creating SQL views for each user role in the MySQL database.
