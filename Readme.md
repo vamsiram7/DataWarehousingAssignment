@@ -7,7 +7,6 @@ This project implements a data warehousing solution for organizational insights.
 
 - **Python** (ETL development using pandas)
 - **MySQL** (data warehouse simulation)
-- **Jupyter Notebooks** (KPI analysis)
 - **SQL** (views, filters, role-based access)
 - **GitHub** (version control and project showcase) 
 ---
