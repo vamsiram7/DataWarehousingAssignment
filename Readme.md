@@ -42,7 +42,7 @@ All cleaned CSVs are saved in the `/outputs/` folder and loaded into the MySQL d
 
 ## KPI Metrics Summary
 
-Key business metrics were computed using both `.ipynb` notebooks and `.py` scripts — located in the `notebooks/` folder.
+Key business metrics were computed `.py` scripts — located in the `notebooks/` folder.
 
 | Domain     | KPIs Generated                                              |
 |------------|-------------------------------------------------------------|
