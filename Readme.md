@@ -55,21 +55,20 @@ Key business metrics were computed using `.py` scripts — located in the `noteb
 
 This project simulates access control by creating SQL views for each user role in the MySQL database.
 
-| Role         | SQL View Name          | Access Permissions                              |
-|--------------|------------------------|-------------------------------------------------|
-| HR User      | `view_hr_user`         | Employee data, salary, headcount, attrition     |
-| Finance User | `view_finance_user`    | Expense types, amounts, dates                   |
-| Super User   | All views/tables       | Full access to all business domains             |
+| Role         | SQL View Name          | Access Permissions            |
+|--------------|------------------------|-------------------------------|
+| HR User      | `view_hr_user`         | Employee data and HR mertics  |
+| Finance User | `view_finance_user`    | Expenses and Financial metrics|
+| Super User   | All views/tables       | Full access to all data       |
 
 Views are defined inside: `sql/role_views.sql` and created via `create_views.py`
 
 ## Bonus Features
 
-| Feature             | Script/Notebook                           | Description                                               |
-|---------------------|-------------------------------------------|-----------------------------------------------------------|
-| SCD Type 2          | `etl/scd2_employee_etl.py`                | Tracks historical changes in employee data                |
-| Incremental Loading | `etl/incremental_fact_finance_etl.py`     | Loads only new records into all fact and dimension tables.|
-
+| Feature             | Script/Notebook                           | Description                                                     |
+|---------------------|-------------------------------------------|-----------------------------------------------------------------|
+| SCD Type 2          | `etl/scd2_employee_etl.py`                | Tracks historical changes in employee data                      |
+| Incremental Loading | `etl/incremental_fact_finance_etl.py`     | Loads only new records inccrementally into all supported tables.|
 
 
 ## Setup Instructions
@@ -195,7 +194,7 @@ Run the following script to load the cleaned data into MySQL:
 ```bash
 python sql/load_to_mysql.py
 ```
-### 6.3. Launch KPI
+### 6.3. Generate KPI
 You can view KPIs by running the following Python scripts:
 
 ```bash
