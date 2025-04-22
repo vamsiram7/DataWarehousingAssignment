@@ -190,7 +190,13 @@ python etl/finance_etl.py
 python etl/operations_etl.py
 ```
 ### 6.2. Load cleaned data into MySQL
-Run the following script to load the cleaned data into MySQL:
+
+#### 6.2.1. **Create a Database**:
+   - Create a new database for your project:
+     ```sql
+     CREATE DATABASE IF NOT EXISTS organizational_insights;
+     ```
+#### 6.2.2.Run the following script to load the cleaned data into MySQL:
 ```bash
 python sql/load_to_mysql.py
 ```
