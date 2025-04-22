@@ -61,7 +61,9 @@ This project simulates access control by creating SQL views for each user role i
 | Finance User | `view_finance_user`    | Expenses and Financial metrics|
 | Super User   | All views/tables       | Full access to all data       |
 
-Views are defined inside: `sql/role_views.sql` and created via `create_views.py`
+Views are defined inside `sql/role_views.sql` and created using:
+- `create_views.py`: Creates role-based SQL views in MySQL
+- `role_access.py`: Prompts user for login credentials and displays role-specific data
 
 ## Bonus Features
 
@@ -218,6 +220,10 @@ python notebooks/operations_kpi.py
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
+```
+To access data based on user credentials, run the following script:
+```bash
+python sql/role_access.py
 ```
 ### 6.6. Run Bonus Features
 

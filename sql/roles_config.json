@@ -1,6 +1,5 @@
 {
     "admin": {"role": "Super", "password": "adminpass"},
     "hr_user": {"role": "HR", "password": "hrpass"},
-    "finance_user": {"role": "Finance", "password": "financepass"},
-    "guest": "guest"
+    "finance_user": {"role": "Finance", "password": "financepass"}
 }
