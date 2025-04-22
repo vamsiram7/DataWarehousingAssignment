@@ -17,10 +17,10 @@ This project implements a data warehousing solution for organizational insights.
 organizational-insights-data-warehouse/
 ├── data/           # Raw Excel files
 ├── outputs/        # Cleaned CSV files (facts and dimensions)
-├── etl/            # ETL, SCD, and incremental scripts
+├── etl/            # ETL, SCD Type 2, audit logging and incremental scripts
 ├── sql/            # SQL view and load scripts
-├── notebooks/      # py scripts for KPI and SCD
-├── docs/           # Optional: schema diagrams or descriptions
+├── notebooks/      # .py scripts for KPI, SCD Type 2 and audit log
+├── docs/           # schema diagrams or descriptions
 └── README.md       # Project documentation
 ```
 
