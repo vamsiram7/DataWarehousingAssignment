@@ -21,7 +21,7 @@ def load_data_to_mysql():
             print("Config file not found. Using default credentials.")
             host = "localhost"
             user = "root"
-            password = "Adavi@14"  # You'll want to change this
+            password = "your_password_here" 
             database = "organizational_insights"
         
         # Create MySQL connection
