@@ -2,7 +2,7 @@ import pandas as pd
 import mysql.connector
 import configparser
 
-# Load DB Config
+# Load DB config
 config = configparser.ConfigParser()
 config.read("sql/db_config.ini")
 
@@ -13,35 +13,37 @@ DB_CONFIG = {
     "database": config['mysql']['database']
 }
 
-# Connect and load table
-with mysql.connector.connect(**DB_CONFIG) as conn:
-    df = pd.read_sql("SELECT * FROM dim_employee_scd2", conn)
+# Connect to MySQL
+conn = mysql.connector.connect(**DB_CONFIG)
+df = pd.read_sql("SELECT * FROM dim_employee_scd2", conn)
+conn.close()
 
-# Identify employees with both old and new rows
-changed_ids = df.groupby('EmployeeID').filter(lambda x: x['IsCurrent'].nunique() > 1)['EmployeeID'].unique()
+# Split current and historical records
+old = df[df['IsCurrent'] == 0].copy()
+new = df[df['IsCurrent'] == 1].copy()
 
-# Filter and merge old + new records
-old_df = df[(df['EmployeeID'].isin(changed_ids)) & (df['IsCurrent'] == 0)]
-new_df = df[(df['EmployeeID'].isin(changed_ids)) & (df['IsCurrent'] == 1)]
+# Join on EmployeeID
+merged = old.merge(new, on='EmployeeID', suffixes=('_OLD', '_NEW'))
 
-merged = old_df.merge(new_df, on="EmployeeID", suffixes=('_OLD', '_NEW'))
-
-# Filter only those where tracked fields actually changed
-tracked_fields = ['Name', 'Gender', 'ManagerID', 'DateOfJoining']
-has_diff = []
+# Track changes
+change_rows = []
 
 for _, row in merged.iterrows():
-    for field in tracked_fields:
-        if str(row[f'{field}_OLD']) != str(row[f'{field}_NEW']):
-            has_diff.append(row)
-            break  # No need to check further if any one field is different
+    changes = []
+    for col in ['Name', 'Gender', 'ManagerID', 'DateOfJoining']:
+        old_val = row[f"{col}_OLD"]
+        new_val = row[f"{col}_NEW"]
+        if old_val != new_val:
+            changes.append(f"{col}: {old_val} → {new_val}")
+    
+    if changes:
+        change_rows.append({
+            'EmployeeID': row['EmployeeID'],
+            'Changes': "; ".join(changes),
+            'Status': row['Status_NEW']
+        })
 
-# Convert to DataFrame and print
-diff_df = pd.DataFrame(has_diff)
-pd.set_option('display.max_columns', None)
-
-print("\n SCD Type 2 - Real Changes (OLD vs NEW):\n")
-if not diff_df.empty:
-    print(diff_df.sort_values(by='EmployeeID'))
-else:
-    print("No actual changes in tracked fields detected.")
+# Output changes
+changes_df = pd.DataFrame(change_rows)
+print("SCD Type 2 - Changed Fields Summary with Values:")
+print(changes_df)
