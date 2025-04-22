@@ -187,10 +187,10 @@ pip install -r requirements.txt
 
 Create a new database for your project:
     
-     ```sql
+     
      mysql -u root -p
      CREATE DATABASE IF NOT EXISTS organizational_insights;
-     ```
+     
 
 ### 6.2. Run ETL scripts
 
