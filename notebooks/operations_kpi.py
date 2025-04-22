@@ -1,8 +1,23 @@
 import pandas as pd
+import mysql.connector
+import configparser
+
+# Load MySQL DB config
+config = configparser.ConfigParser()
+config.read("sql/db_config.ini")
+
+DB_CONFIG = {
+    "host": config['mysql']['host'],
+    "user": config['mysql']['user'],
+    "password": config['mysql']['password'],
+    "database": config['mysql']['database']
+}
 
 # Load data
-fact_ops = pd.read_csv('outputs/fact_operations.csv')
-dim_proc = pd.read_csv('outputs/dim_process.csv')
+conn = mysql.connector.connect(**DB_CONFIG)
+fact_ops = pd.read_sql("SELECT * FROM fact_operations", conn)
+dim_proc = pd.read_sql("SELECT * FROM dim_process", conn)
+conn.close()
 
 # Merge Dimension Table to Get Process Info
 ops = fact_ops.merge(dim_proc, on='ProcessID', how='left')

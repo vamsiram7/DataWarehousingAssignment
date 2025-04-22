@@ -1,8 +1,26 @@
 import pandas as pd
+import mysql.connector
+import configparser
 
-# Load cleaned data
-fact_hr = pd.read_csv('outputs/fact_hr.csv')
-dim_employee = pd.read_csv('outputs/dim_employee.csv')
+# Load DB config
+config = configparser.ConfigParser()
+config.read("sql/db_config.ini")
+
+DB_CONFIG = {
+    "host": config['mysql']['host'],
+    "user": config['mysql']['user'],
+    "password": config['mysql']['password'],
+    "database": config['mysql']['database']
+}
+
+# Connect to MySQL and fetch data
+conn = mysql.connector.connect(**DB_CONFIG)
+
+# Load tables as DataFrames
+fact_hr = pd.read_sql("SELECT * FROM fact_hr", conn)
+dim_employee = pd.read_sql("SELECT * FROM dim_employee", conn)
+
+conn.close()
 
 # Merge to enrich fact_hr with gender
 hr = fact_hr.merge(dim_employee, on='EmployeeID', how='left')
@@ -11,7 +29,7 @@ hr = fact_hr.merge(dim_employee, on='EmployeeID', how='left')
 headcount = hr[hr['Status'].str.lower() == 'active']['EmployeeID'].nunique()
 print("Current Headcount:", headcount)
 
-# Attrition Rate (Resigned employee percentage)
+# Attrition Rate
 resigned = hr[hr['Status'].str.lower() == 'resigned']['EmployeeID'].nunique()
 total = hr['EmployeeID'].nunique()
 attrition_rate = (resigned / total) * 100

@@ -1,10 +1,27 @@
 import pandas as pd
+import mysql.connector
+import configparser
 
-# Load data
-fact_fin = pd.read_csv('outputs/fact_finance.csv')
-dim_exp = pd.read_csv('outputs/dim_expensetype.csv')
-dim_dept = pd.read_csv('outputs/dim_department.csv')
-fact_hr = pd.read_csv('outputs/fact_hr.csv')
+# Load MySQL DB config
+config = configparser.ConfigParser()
+config.read("sql/db_config.ini")
+
+DB_CONFIG = {
+    "host": config['mysql']['host'],
+    "user": config['mysql']['user'],
+    "password": config['mysql']['password'],
+    "database": config['mysql']['database']
+}
+
+# Connect and load tables from MySQL
+conn = mysql.connector.connect(**DB_CONFIG)
+
+fact_fin = pd.read_sql("SELECT * FROM fact_finance", conn)
+dim_exp = pd.read_sql("SELECT * FROM dim_expensetype", conn)
+dim_dept = pd.read_sql("SELECT * FROM dim_department", conn)
+fact_hr = pd.read_sql("SELECT * FROM fact_hr", conn)
+
+conn.close()
 
 # Merge fact_finance with dim_expensetype to get ExpenseTypeName
 finance = fact_fin.merge(dim_exp, on='ExpenseTypeID', how='left')
@@ -16,7 +33,8 @@ finance = finance.merge(fact_hr[['EmployeeID', 'DepartmentID']], on='EmployeeID'
 finance = finance.merge(dim_dept, on='DepartmentID', how='left')
 
 # Convert DateKey to datetime and extract Month
-finance['Date'] = pd.to_datetime(finance['DateKey'], format='%Y%m%d')
+finance['Date'] = pd.to_datetime(finance['DateKey'], format='%Y%m%d', errors='coerce')
+finance = finance[~finance['Date'].isna()]
 finance['Month'] = finance['Date'].dt.to_period('M')
 
 # Group by Month, DepartmentName, and ExpenseTypeName
@@ -25,11 +43,3 @@ monthly_exp_dept_type = finance.groupby(['Month', 'DepartmentName', 'ExpenseType
 # Display result
 print("Monthly Expenses by Department and Expense Type:")
 print(monthly_exp_dept_type)
-
-# Check for missing DepartmentID in fact_hr
-#missing_dept_id = finance[finance['DepartmentID'].isna()]
-#print(missing_dept_id)
-
-# Check for unmatched DepartmentID in dim_department
-#unmatched_dept = finance[~finance['DepartmentID'].isin(dim_dept['DepartmentID'])]
-#print(unmatched_dept)
