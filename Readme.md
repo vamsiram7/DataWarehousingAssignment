@@ -68,7 +68,8 @@ Views are defined inside: `sql/role_views.sql` and created via `create_views.py`
 | Feature             | Script/Notebook                           | Description                                                     |
 |---------------------|-------------------------------------------|-----------------------------------------------------------------|
 | SCD Type 2          | `etl/scd2_employee_etl.py`                | Tracks historical changes in employee data                      |
-| Incremental Loading | `etl/incremental_fact_finance_etl.py`     | Loads only new records inccrementally into all supported tables.|
+| Audit Logging       | `audit_logger.py`, `view_audit_log.py`    | Logs ETL and data load actions                                  |
+| Incremental Loading | `etl/incremental_fact_finance_etl.py`     | Loads only new records incrementally into all supported tables |
 
 
 ## Setup Instructions
@@ -182,25 +183,31 @@ pip install -r requirements.txt
 
 ## 6. Workflow Execution
 
-### 6.1. Run ETL scripts.
+### 6.1. Create a Database
+
+Create a new database for your project:
+     ```bash
+     mysql -u root -p
+     ```     
+     ```sql
+     CREATE DATABASE IF NOT EXISTS organizational_insights;
+     ```
+
+### 6.2. Run ETL scripts
+
 Run the following ETL scripts to get cleaned fact and dimension tables:
 ```bash
 python etl/hr_etl.py
 python etl/finance_etl.py
 python etl/operations_etl.py
 ```
-### 6.2. Load cleaned data into MySQL
+### 6.3. Load cleaned data into MySQL
 
-#### 6.2.1. **Create a Database**:
-   - Create a new database for your project:
-     ```sql
-     CREATE DATABASE IF NOT EXISTS organizational_insights;
-     ```
-#### 6.2.2.Run the following script to load the cleaned data into MySQL:
+Run the following script to load the cleaned data into MySQL:
 ```bash
 python sql/load_to_mysql.py
 ```
-### 6.3. Generate KPI
+### 6.4. Generate KPI
 You can view KPIs by running the following Python scripts:
 
 ```bash
@@ -208,14 +215,14 @@ python notebooks/hr_kpi.py
 python notebooks/finance_kpi.py
 python notebooks/operations_kpi.py
 ```
-### 6.4. Role Based Views
+### 6.5. Role Based Views
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
 ```
-### 6.5. Run Bonus Features
+### 6.6. Run Bonus Features
 
-#### 6.5.1. SCD Type 2 for Employee Data
+#### 6.6.1. SCD Type 2 for Employee Data
 To apply SCD Type 2 logic for employee data run the following script:
 ```bash
 python etl/scd2_employee_etl.py
@@ -224,7 +231,14 @@ To access the SCD Type2 data run the following script:
 ```bash
 python notebooks/scd2.py
 ```
-#### 6.5.2. Incremental Loading
+
+#### 6.6.2. Audit Logging
+To view the Audit Log run the following script
+```bash
+python notebooks/view_audit_log.py
+```
+
+#### 6.6.3. Incremental Loading
 To load new data incrementally into all supported tables:
 1. Add new records to any of the following
    `outputs/fact_finance.csv`
