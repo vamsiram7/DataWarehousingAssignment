@@ -186,9 +186,11 @@ pip install -r requirements.txt
 ### 6.1. Create a Database
 
 Create a new database for your project:
+
      ```bash
      mysql -u root -p
-     ```     
+     ```    
+ 
      ```sql
      CREATE DATABASE IF NOT EXISTS organizational_insights;
      ```
