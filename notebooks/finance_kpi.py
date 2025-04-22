@@ -27,9 +27,9 @@ print("Monthly Expenses by Department and Expense Type:")
 print(monthly_exp_dept_type)
 
 # Check for missing DepartmentID in fact_hr
-missing_dept_id = finance[finance['DepartmentID'].isna()]
-print(missing_dept_id)
+#missing_dept_id = finance[finance['DepartmentID'].isna()]
+#print(missing_dept_id)
 
 # Check for unmatched DepartmentID in dim_department
-unmatched_dept = finance[~finance['DepartmentID'].isin(dim_dept['DepartmentID'])]
-print(unmatched_dept)
+#unmatched_dept = finance[~finance['DepartmentID'].isin(dim_dept['DepartmentID'])]
+#print(unmatched_dept)

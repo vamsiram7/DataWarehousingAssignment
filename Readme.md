@@ -202,7 +202,7 @@ python notebooks/hr_kpi.py
 python notebooks/finance_kpi.py
 python notebooks/operations_kpi.py
 ```
-### 6.4. Create Role Based Views
+### 6.4. Role Based Views
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
