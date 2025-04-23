@@ -51,6 +51,9 @@ def apply_incremental_load(input_path, table_name, key_columns):
     final_new_data = new_data.loc[delta.index]
 
     if not final_new_data.empty:
+        print(f"New rows for {table_name}:")
+        print(final_new_data)
+
         for _, row in final_new_data.iterrows():
             placeholders = ", ".join(["%s"] * len(row))
             columns = ", ".join(final_new_data.columns)

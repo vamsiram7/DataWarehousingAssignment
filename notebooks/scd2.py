@@ -46,4 +46,8 @@ for _, row in merged.iterrows():
 # Output changes
 changes_df = pd.DataFrame(change_rows)
 print("SCD Type 2 - Changed Fields Summary with Values:")
-print(changes_df)
+
+if changes_df.empty:
+    print("No SCD Type 2 changes detected.")
+else:
+    print(changes_df)
