@@ -19,6 +19,7 @@ def apply_incremental_load(input_path, table_name, key_columns):
     cursor = conn.cursor()
 
     new_data = pd.read_csv(input_path)
+    new_data.dropna(how='all', inplace=True)
 
     try:
         cursor.execute(f"SELECT * FROM {table_name}")
@@ -34,11 +35,25 @@ def apply_incremental_load(input_path, table_name, key_columns):
         conn.close()
         return
 
+    # Normalize key columns (string cleanup and date parsing)
     for col in key_columns:
-        try:
-            new_data[col] = new_data[col].astype(existing_data[col].dtype)
-        except:
-            continue
+        if col in new_data.columns:
+            if new_data[col].dtype == 'object':
+                new_data[col] = new_data[col].astype(str).str.strip().str.upper()
+            if 'date' in col.lower():
+                try:
+                    new_data[col] = pd.to_datetime(new_data[col])
+                except Exception:
+                    pass
+
+        if col in existing_data.columns:
+            if existing_data[col].dtype == 'object':
+                existing_data[col] = existing_data[col].astype(str).str.strip().str.upper()
+            if 'date' in col.lower():
+                try:
+                    existing_data[col] = pd.to_datetime(existing_data[col])
+                except Exception:
+                    pass
 
     merged = new_data.merge(
         existing_data,
