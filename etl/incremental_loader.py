@@ -15,184 +15,249 @@ DB_CONFIG = {
     "database": config['mysql']['database']
 }
 
-def incremental_dim_employee(cursor, conn):
-    print("Incremental loading: dim_employee...")
+def load_staging_hr(cursor, conn):
+    print("Loading staging_hr...")
     df = pd.read_excel('./data/HR_Dataset_Dirty.xlsx')
-    inserted = 0
-    for _, row in df.iterrows():
-        if pd.notna(row['EmployeeID']):
-            cursor.execute("""
-                INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
-                VALUES (%s, %s, %s, %s)
-            """, (
-                int(row['EmployeeID']),
-                row['Name'],
-                row['Gender'] if pd.notna(row['Gender']) else None,
-                int(row['ManagerID']) if pd.notna(row['ManagerID']) else None
-            ))
-            inserted += cursor.rowcount
-    conn.commit()
-    log_audit_event('dim_employee', 'INCREMENTAL_INSERT', inserted)
-    print(f"dim_employee incremental load completed. Rows inserted: {inserted}")
 
-def incremental_dim_department(cursor, conn):
-    print("Incremental loading: dim_department...")
-    df = pd.read_excel('./data/HR_Dataset_Dirty.xlsx')
-    inserted = 0
-    departments = df['Department'].dropna().unique()
-    for department in departments:
+    df['Department'] = df['Department'].astype(str).str.strip().str.upper()
+    df['Gender'] = df['Gender'].fillna('Unknown')
+    df['Salary'] = df['Salary'].fillna(df['Salary'].median())
+    df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
+    df.dropna(subset=['EmployeeID', 'Department'], inplace=True)
+
+    def parse_dates(x):
+        try:
+            return pd.to_datetime(x)
+        except:
+            return pd.NaT
+
+    df['DateOfJoining'] = df['DateOfJoining'].apply(parse_dates)
+    df = df[~df['DateOfJoining'].isnull()]
+    df.drop_duplicates(inplace=True)
+
+    cursor.execute("DROP TABLE IF EXISTS staging_hr")
+    cursor.execute("""
+        CREATE TABLE staging_hr (
+            EmployeeID INT,
+            Name VARCHAR(255),
+            Gender VARCHAR(255),
+            ManagerID INT,
+            Department VARCHAR(255),
+            Salary FLOAT,
+            Status VARCHAR(255),
+            DateOfJoining DATE
+        )
+    """)
+
+    for _, row in df.iterrows():
         cursor.execute("""
-            INSERT IGNORE INTO dim_department (department)
-            VALUES (%s)
-        """, (department.strip().upper(),))
-        inserted += cursor.rowcount
+            INSERT INTO staging_hr (EmployeeID, Name, Gender, ManagerID, Department, Salary, Status, DateOfJoining)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            int(row['EmployeeID']),
+            row['Name'],
+            row['Gender'],
+            int(row['ManagerID']) if pd.notna(row['ManagerID']) else None,
+            row['Department'],
+            float(row['Salary']),
+            row['Status'],
+            row['DateOfJoining']
+        ))
     conn.commit()
-    log_audit_event('dim_department', 'INCREMENTAL_INSERT', inserted)
-    print(f"dim_department incremental load completed. Rows inserted: {inserted}")
 
-def incremental_fact_hr(cursor, conn):
-    print("Incremental loading: fact_hr...")
-    df = pd.read_excel('./data/HR_Dataset_Dirty.xlsx')
-    inserted = 0
-    for _, row in df.iterrows():
-        if pd.notna(row['EmployeeID']) and pd.notna(row['Department']):
-            cursor.execute("SELECT departmentid FROM dim_department WHERE department = %s", (row['Department'].strip().upper(),))
-            dept_id = cursor.fetchone()
-            if dept_id:
-                cursor.fetchall()  # Clear unread results
-                cursor.execute("""
-                    INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    int(row['EmployeeID']),
-                    dept_id[0],
-                    float(row['Salary']) if pd.notna(row['Salary']) else None,
-                    row['Status'],
-                    pd.to_datetime(row['DateOfJoining']).strftime('%Y%m%d') if pd.notna(row['DateOfJoining']) else None
-                ))
-                inserted += cursor.rowcount
-            else:
-                cursor.fetchall()  # Clear if no match
+def incremental_hr(cursor, conn):
+    print("Incrementally loading HR data...")
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_department (department)
+        SELECT DISTINCT department FROM staging_hr
+        WHERE department NOT IN (SELECT department FROM dim_department)
+    """)
     conn.commit()
-    log_audit_event('fact_hr', 'INCREMENTAL_INSERT', inserted)
-    print(f"fact_hr incremental load completed. Rows inserted: {inserted}")
+    log_audit_event('dim_department', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-def incremental_dim_expensetype(cursor, conn):
-    print("Incremental loading: dim_expensetype...")
+    cursor.execute("""
+        INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
+        SELECT DISTINCT employeeid, name, gender, managerid FROM staging_hr
+        WHERE employeeid NOT IN (SELECT employeeid FROM dim_employee)
+    """)
+    conn.commit()
+    log_audit_event('dim_employee', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
+        SELECT 
+            s.employeeid,
+            d.departmentid,
+            s.salary,
+            s.status,
+            DATE_FORMAT(s.dateofjoining, '%Y%m%d')
+        FROM staging_hr s
+        JOIN dim_department d ON s.department = d.department
+        LEFT JOIN fact_hr f ON f.employeeid = s.employeeid AND f.datekey = DATE_FORMAT(s.dateofjoining, '%Y%m%d')
+        WHERE f.employeeid IS NULL
+    """)
+    conn.commit()
+    log_audit_event('fact_hr', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+def load_staging_finance(cursor, conn):
+    print("Loading staging_finance...")
     df = pd.read_excel('./data/Finance_Dataset_Dirty.xlsx')
-    inserted = 0
-    expensetypes = df['ExpenseType'].dropna().unique()
-    for expensetype in expensetypes:
-        cursor.execute("""
-            INSERT IGNORE INTO dim_expensetype (expensetype)
-            VALUES (%s)
-        """, (expensetype.strip().upper(),))
-        inserted += cursor.rowcount
-    conn.commit()
-    log_audit_event('dim_expensetype', 'INCREMENTAL_INSERT', inserted)
-    print(f"dim_expensetype incremental load completed. Rows inserted: {inserted}")
 
-def incremental_fact_finance(cursor, conn):
-    print("Incremental loading: fact_finance...")
-    df = pd.read_excel('./data/Finance_Dataset_Dirty.xlsx')
-    inserted = 0
+    df['ExpenseType'] = df['ExpenseType'].astype(str).str.strip().str.upper()
+    df['ExpenseAmount'] = pd.to_numeric(df['ExpenseAmount'], errors='coerce')
+    df['ApprovedBy'] = pd.to_numeric(df['ApprovedBy'], errors='coerce')
+
+    typo_corrections = {'TRAVELL': 'TRAVEL'}
+    df['ExpenseType'] = df['ExpenseType'].replace(typo_corrections)
+
+    df = df[df['ExpenseType'].str.strip() != '']
+    df.dropna(subset=['EmployeeID', 'ExpenseType', 'ExpenseAmount'], inplace=True)
+
+    def parse_dates(x):
+        try:
+            return pd.to_datetime(x)
+        except:
+            return pd.NaT
+
+    df['ExpenseDate'] = df['ExpenseDate'].apply(parse_dates)
+    df = df[~df['ExpenseDate'].isnull()]
+    df.drop_duplicates(inplace=True)
+
+    cursor.execute("DROP TABLE IF EXISTS staging_finance")
+    cursor.execute("""
+        CREATE TABLE staging_finance (
+            EmployeeID INT,
+            ExpenseType VARCHAR(255),
+            ExpenseAmount FLOAT,
+            ApprovedBy INT,
+            ExpenseDate DATE
+        )
+    """)
+
     for _, row in df.iterrows():
-        if pd.notna(row['EmployeeID']) and pd.notna(row['ExpenseType']):
-            cursor.execute("SELECT expensetypeid FROM dim_expensetype WHERE expensetype = %s", (row['ExpenseType'].strip().upper(),))
-            expensetypeid = cursor.fetchone()
-            if expensetypeid:
-                cursor.fetchall()
-                cursor.execute("SELECT employeeid FROM dim_employee WHERE employeeid = %s", (row['EmployeeID'],))
-                emp_check = cursor.fetchone()
-                if emp_check:
-                    cursor.fetchall()
-                    cursor.execute("""
-                        INSERT INTO fact_finance (employeeid, expensetypeid, expenseamount, approvedby, datekey)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (
-                        int(row['EmployeeID']),
-                        expensetypeid[0],
-                        float(row['ExpenseAmount']) if pd.notna(row['ExpenseAmount']) else None,
-                        int(row['ApprovedBy']) if pd.notna(row['ApprovedBy']) else None,
-                        pd.to_datetime(row['ExpenseDate']).strftime('%Y%m%d') if pd.notna(row['ExpenseDate']) else None
-                    ))
-                    inserted += cursor.rowcount
-                else:
-                    cursor.fetchall()
-            else:
-                cursor.fetchall()
-    conn.commit()
-    log_audit_event('fact_finance', 'INCREMENTAL_INSERT', inserted)
-    print(f"fact_finance incremental load completed. Rows inserted: {inserted}")
-
-def incremental_dim_process(cursor, conn):
-    print("Incremental loading: dim_process...")
-    df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
-    inserted = 0
-    processes = df['ProcessName'].dropna().unique()
-    for process in processes:
         cursor.execute("""
-            INSERT IGNORE INTO dim_process (processname)
-            VALUES (%s)
-        """, (process.strip().upper(),))
-        inserted += cursor.rowcount
+            INSERT INTO staging_finance (EmployeeID, ExpenseType, ExpenseAmount, ApprovedBy, ExpenseDate)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            int(row['EmployeeID']),
+            row['ExpenseType'],
+            float(row['ExpenseAmount']),
+            int(row['ApprovedBy']) if pd.notna(row['ApprovedBy']) else None,
+            row['ExpenseDate']
+        ))
     conn.commit()
-    log_audit_event('dim_process', 'INCREMENTAL_INSERT', inserted)
-    print(f"dim_process incremental load completed. Rows inserted: {inserted}")
 
-def incremental_dim_location(cursor, conn):
-    print("Incremental loading: dim_location...")
-    df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
-    inserted = 0
-    locations = df['Location'].dropna().unique()
-    for location in locations:
-        cursor.execute("""
-            INSERT IGNORE INTO dim_location (location)
-            VALUES (%s)
-        """, (location.strip().title(),))
-        inserted += cursor.rowcount
+def incremental_finance(cursor, conn):
+    print("Incrementally loading Finance data...")
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_expensetype (expensetype)
+        SELECT DISTINCT expensetype FROM staging_finance
+        WHERE expensetype NOT IN (SELECT expensetype FROM dim_expensetype)
+    """)
     conn.commit()
-    log_audit_event('dim_location', 'INCREMENTAL_INSERT', inserted)
-    print(f"dim_location incremental load completed. Rows inserted: {inserted}")
+    log_audit_event('dim_expensetype', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-def incremental_fact_operations(cursor, conn):
-    print("Incremental loading: fact_operations...")
+    cursor.execute("""
+        INSERT INTO fact_finance (employeeid, expensetypeid, expenseamount, approvedby, datekey)
+        SELECT 
+            s.employeeid,
+            e.expensetypeid,
+            s.expenseamount,
+            s.approvedby,
+            DATE_FORMAT(s.expensedate, '%Y%m%d')
+        FROM staging_finance s
+        JOIN dim_expensetype e ON s.expensetype = e.expensetype
+        JOIN dim_employee de ON s.employeeid = de.employeeid
+        LEFT JOIN fact_finance f ON f.employeeid = s.employeeid AND f.expensetypeid = e.expensetypeid AND f.datekey = DATE_FORMAT(s.expensedate, '%Y%m%d')
+        WHERE f.employeeid IS NULL
+    """)
+    conn.commit()
+    log_audit_event('fact_finance', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+def load_staging_operations(cursor, conn):
+    print("Loading staging_operations...")
     df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
-    inserted = 0
+
+    df['ProcessName'] = df['ProcessName'].astype(str).str.strip().str.upper()
+    df['Department'] = df['Department'].astype(str).str.strip().str.upper()
+    df['Location'] = df['Location'].astype(str).str.strip().str.title()
+    df['DowntimeHours'] = pd.to_numeric(df['DowntimeHours'], errors='coerce')
+
+    df = df[(df['ProcessName'].str.strip() != '') & (df['Department'].str.strip() != '') & (df['Location'].str.strip() != '')]
+    df.dropna(subset=['ProcessName', 'Department', 'Location', 'DowntimeHours'], inplace=True)
+
+    def parse_dates(x):
+        try:
+            return pd.to_datetime(x)
+        except:
+            return pd.NaT
+
+    df['ProcessDate'] = df['ProcessDate'].apply(parse_dates)
+    df = df[~df['ProcessDate'].isnull()]
+    df.drop_duplicates(inplace=True)
+
+    cursor.execute("DROP TABLE IF EXISTS staging_operations")
+    cursor.execute("""
+        CREATE TABLE staging_operations (
+            ProcessName VARCHAR(255),
+            Department VARCHAR(255),
+            Location VARCHAR(255),
+            DowntimeHours FLOAT,
+            ProcessDate DATE
+        )
+    """)
+
     for _, row in df.iterrows():
-        if pd.notna(row['ProcessName']) and pd.notna(row['Location']) and pd.notna(row['Department']):
-            cursor.execute("SELECT processid FROM dim_process WHERE processname = %s", (row['ProcessName'].strip().upper(),))
-            processid = cursor.fetchone()
-            if processid:
-                cursor.fetchall()
-                cursor.execute("SELECT locationid FROM dim_location WHERE location = %s", (row['Location'].strip().title(),))
-                locationid = cursor.fetchone()
-                if locationid:
-                    cursor.fetchall()
-                    cursor.execute("SELECT departmentid FROM dim_department WHERE department = %s", (row['Department'].strip().upper(),))
-                    departmentid = cursor.fetchone()
-                    if departmentid:
-                        cursor.fetchall()
-                        cursor.execute("""
-                            INSERT INTO fact_operations (processid, locationid, departmentid, downtimehours, datekey)
-                            VALUES (%s, %s, %s, %s, %s)
-                        """, (
-                            processid[0],
-                            locationid[0],
-                            departmentid[0],
-                            float(row['DowntimeHours']) if pd.notna(row['DowntimeHours']) else None,
-                            pd.to_datetime(row['ProcessDate']).strftime('%Y%m%d') if pd.notna(row['ProcessDate']) else None
-                        ))
-                        inserted += cursor.rowcount
-                    else:
-                        cursor.fetchall()
-                else:
-                    cursor.fetchall()
-            else:
-                cursor.fetchall()
+        cursor.execute("""
+            INSERT INTO staging_operations (ProcessName, Department, Location, DowntimeHours, ProcessDate)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            row['ProcessName'],
+            row['Department'],
+            row['Location'],
+            float(row['DowntimeHours']),
+            row['ProcessDate']
+        ))
     conn.commit()
-    log_audit_event('fact_operations', 'INCREMENTAL_INSERT', inserted)
-    print(f"fact_operations incremental load completed. Rows inserted: {inserted}")
+
+def incremental_operations(cursor, conn):
+    print("Incrementally loading Operations data...")
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_process (processname)
+        SELECT DISTINCT processname FROM staging_operations
+        WHERE processname NOT IN (SELECT processname FROM dim_process)
+    """)
+    conn.commit()
+    log_audit_event('dim_process', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_location (location)
+        SELECT DISTINCT location FROM staging_operations
+        WHERE location NOT IN (SELECT location FROM dim_location)
+    """)
+    conn.commit()
+    log_audit_event('dim_location', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        INSERT INTO fact_operations (processid, locationid, departmentid, downtimehours, datekey)
+        SELECT 
+            p.processid,
+            l.locationid,
+            d.departmentid,
+            s.downtimehours,
+            DATE_FORMAT(s.processdate, '%Y%m%d')
+        FROM staging_operations s
+        JOIN dim_process p ON s.processname = p.processname
+        JOIN dim_location l ON s.location = l.location
+        JOIN dim_department d ON s.department = d.department
+        LEFT JOIN fact_operations f ON f.processid = p.processid AND f.locationid = l.locationid AND f.departmentid = d.departmentid AND f.datekey = DATE_FORMAT(s.processdate, '%Y%m%d')
+        WHERE f.processid IS NULL
+    """)
+    conn.commit()
+    log_audit_event('fact_operations', 'INCREMENTAL_INSERT', cursor.rowcount)
 
 def run_scd2():
     print("Running SCD2 process...")
@@ -202,16 +267,14 @@ if __name__ == "__main__":
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
 
-    incremental_dim_department(cursor, conn)
-    incremental_dim_employee(cursor, conn)
-    incremental_fact_hr(cursor, conn)
+    load_staging_hr(cursor, conn)
+    incremental_hr(cursor, conn)
 
-    incremental_dim_expensetype(cursor, conn)
-    incremental_fact_finance(cursor, conn)
+    load_staging_finance(cursor, conn)
+    incremental_finance(cursor, conn)
 
-    incremental_dim_process(cursor, conn)
-    incremental_dim_location(cursor, conn)
-    incremental_fact_operations(cursor, conn)
+    load_staging_operations(cursor, conn)
+    incremental_operations(cursor, conn)
 
     run_scd2()
 
