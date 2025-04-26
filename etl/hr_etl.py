@@ -1,51 +1,103 @@
 import pandas as pd
-from datetime import datetime
-from audit_logger import log_etl_run
+import mysql.connector
+import configparser
 
-INPUT_PATH = "./data/HR_Dataset_Dirty.xlsx"
-OUTPUT_EMPLOYEE = "./outputs/dim_employee.csv"
-OUTPUT_DEPARTMENT = "./outputs/dim_department.csv"
-OUTPUT_FACT_HR = "./outputs/fact_hr.csv"
+def hr_etl():
+    # Load database config
+    config = configparser.ConfigParser()
+    config.read('sql/db_config.ini')
+    conn = mysql.connector.connect(
+        host=config['mysql']['host'],
+        user=config['mysql']['user'],
+        password=config['mysql']['password'],
+        database=config['mysql']['database']
+    )
+    cursor = conn.cursor()
 
-def clean_hr_data():
-    hr_df = pd.read_excel(INPUT_PATH)
+    # Read HR dirty data
+    df = pd.read_excel('./data/HR_Dataset_Dirty.xlsx')
 
-    hr_df['Department'] = hr_df['Department'].astype(str).str.strip().str.upper()
-    hr_df['Gender'] = hr_df['Gender'].fillna('Unknown')
-    hr_df['Salary'] = hr_df['Salary'].fillna(hr_df['Salary'].median())
-    hr_df.dropna(subset=['EmployeeID', 'Department'], inplace=True)
+    # Cleaning
+    df['Department'] = df['Department'].astype(str).str.strip().str.upper()
+    df['Gender'] = df['Gender'].fillna('Unknown')
+    df['Salary'] = df['Salary'].fillna(df['Salary'].median())
+    df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
+    df.dropna(subset=['EmployeeID', 'Department'], inplace=True)
 
     def parse_dates(date_str):
         try:
             return pd.to_datetime(date_str)
         except:
-            try:
-                return pd.to_datetime(date_str, dayfirst=True)
-            except:
-                return pd.NaT
+            return pd.NaT
 
-    hr_df['DateOfJoining'] = hr_df['DateOfJoining'].apply(parse_dates)
-    hr_df = hr_df[~hr_df['DateOfJoining'].isnull()]
-    hr_df.drop_duplicates(inplace=True)
+    df['DateOfJoining'] = df['DateOfJoining'].apply(parse_dates)
+    df = df[~df['DateOfJoining'].isnull()]
+    df.drop_duplicates(inplace=True)
 
-    dim_department = pd.DataFrame(hr_df['Department'].unique(), columns=['DepartmentName'])
-    dim_department['DepartmentID'] = range(1, len(dim_department) + 1)
-    hr_df = hr_df.merge(dim_department, left_on='Department', right_on='DepartmentName', how='left')
+    # Create staging table
+    cursor.execute("DROP TABLE IF EXISTS staging_hr")
+    cursor.execute("""
+        CREATE TABLE staging_hr (
+            EmployeeID INT,
+            Name VARCHAR(255),
+            Gender VARCHAR(255),
+            ManagerID INT,
+            Department VARCHAR(255),
+            Salary FLOAT,
+            Status VARCHAR(255),
+            DateOfJoining DATE
+        )
+    """)
 
-    dim_employee = hr_df[['EmployeeID', 'Name', 'Gender', 'ManagerID', 'DateOfJoining']].drop_duplicates()
+    for _, row in df.iterrows():
+        clean_row = (
+            int(row['EmployeeID']) if not pd.isna(row['EmployeeID']) else None,
+            row['Name'],
+            row['Gender'],
+            int(row['ManagerID']) if not pd.isna(row['ManagerID']) else None,
+            row['Department'],
+            float(row['Salary']) if not pd.isna(row['Salary']) else None,
+            row['Status'],
+            row['DateOfJoining'] if not pd.isna(row['DateOfJoining']) else None
+        )
+        cursor.execute("""
+            INSERT INTO staging_hr (EmployeeID, Name, Gender, ManagerID, Department, Salary, Status, DateOfJoining)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, clean_row)
 
-    fact_hr = hr_df[['EmployeeID', 'DepartmentID', 'Salary', 'Status', 'DateOfJoining']].copy()
-    fact_hr['DateKey'] = fact_hr['DateOfJoining'].dt.strftime('%Y%m%d').astype(int)
-    fact_hr.drop(columns='DateOfJoining', inplace=True)
+    conn.commit()
 
-    dim_employee.to_csv(OUTPUT_EMPLOYEE, index=False)
-    dim_department.to_csv(OUTPUT_DEPARTMENT, index=False)
-    fact_hr.to_csv(OUTPUT_FACT_HR, index=False)
+    # Load into dimension tables
+    cursor.execute("""
+        INSERT IGNORE INTO dim_department (department)
+        SELECT DISTINCT Department
+        FROM staging_hr
+    """)
 
-    log_etl_run("dim_employee", "clean_transform", len(dim_employee))
-    log_etl_run("dim_department", "clean_transform", len(dim_department))
-    log_etl_run("fact_hr", "clean_transform", len(fact_hr))
+    cursor.execute("""
+        INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
+        SELECT DISTINCT EmployeeID, Name, Gender, ManagerID
+        FROM staging_hr
+    """)
+
+    # Load into fact_hr
+    cursor.execute("""
+        INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
+        SELECT 
+            s.EmployeeID,
+            d.departmentid,
+            s.Salary,
+            s.Status,
+            DATE_FORMAT(s.DateOfJoining, '%Y%m%d')
+        FROM staging_hr s
+        JOIN dim_department d ON s.Department = d.department
+    """)
+
+    conn.commit()
+    print("HR ETL completed successfully.")
+
+    cursor.close()
+    conn.close()
 
 if __name__ == "__main__":
-    clean_hr_data()
-    print("HR ETL complete.")
+    hr_etl()

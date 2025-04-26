@@ -1,46 +1,106 @@
 import pandas as pd
-from datetime import datetime
-from audit_logger import log_etl_run
+import mysql.connector
+import configparser
 
-INPUT_PATH = "./data/Operations_Dataset_Dirty.xlsx"
-OUTPUT_PROCESS = "./outputs/dim_process.csv"
-OUTPUT_FACT_OPERATIONS = "./outputs/fact_operations.csv"
+def operations_etl():
+    # Load database config
+    config = configparser.ConfigParser()
+    config.read('sql/db_config.ini')
+    conn = mysql.connector.connect(
+        host=config['mysql']['host'],
+        user=config['mysql']['user'],
+        password=config['mysql']['password'],
+        database=config['mysql']['database']
+    )
+    cursor = conn.cursor()
 
-def clean_operations_data():
-    df = pd.read_excel(INPUT_PATH)
+    # Read Operations dirty data
+    df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
 
+    # Basic cleaning
     df['ProcessName'] = df['ProcessName'].astype(str).str.strip().str.upper()
     df['Department'] = df['Department'].astype(str).str.strip().str.upper()
     df['Location'] = df['Location'].astype(str).str.strip().str.title()
-    df.dropna(subset=['ProcessName', 'DowntimeHours', 'ProcessDate'], inplace=True)
+    df['DowntimeHours'] = pd.to_numeric(df['DowntimeHours'], errors='coerce')
 
+    # 🚨 NEW CLEANING: Remove rows with blank ProcessName, Department, or Location
+    df = df[(df['ProcessName'].str.strip() != '') & (df['Department'].str.strip() != '') & (df['Location'].str.strip() != '')]
+
+    # Drop rows where critical columns are missing
+    df.dropna(subset=['ProcessName', 'Department', 'Location', 'DowntimeHours'], inplace=True)
+
+    # Parse ProcessDate
     def parse_dates(date_str):
         try:
             return pd.to_datetime(date_str)
         except:
-            try:
-                return pd.to_datetime(date_str, dayfirst=True)
-            except:
-                return pd.NaT
+            return pd.NaT
 
     df['ProcessDate'] = df['ProcessDate'].apply(parse_dates)
     df = df[~df['ProcessDate'].isnull()]
     df.drop_duplicates(inplace=True)
 
-    dim_process = df[['ProcessName', 'Location']].drop_duplicates().reset_index(drop=True)
-    dim_process['ProcessID'] = range(1, len(dim_process) + 1)
-    df = df.merge(dim_process, how='left', on=['ProcessName', 'Location'])
+    # Create staging table
+    cursor.execute("DROP TABLE IF EXISTS staging_operations")
+    cursor.execute("""
+        CREATE TABLE staging_operations (
+            ProcessName VARCHAR(255),
+            Department VARCHAR(255),
+            Location VARCHAR(255),
+            DowntimeHours FLOAT,
+            ProcessDate DATE
+        )
+    """)
 
-    fact_operations = df[['Department', 'ProcessID', 'DowntimeHours', 'ProcessDate']].copy()
-    fact_operations['DateKey'] = fact_operations['ProcessDate'].dt.strftime('%Y%m%d').astype(int)
-    fact_operations.drop(columns='ProcessDate', inplace=True)
+    for _, row in df.iterrows():
+        clean_row = (
+            row['ProcessName'],
+            row['Department'],
+            row['Location'],
+            float(row['DowntimeHours']) if not pd.isna(row['DowntimeHours']) else None,
+            row['ProcessDate'] if not pd.isna(row['ProcessDate']) else None
+        )
+        cursor.execute("""
+            INSERT INTO staging_operations (ProcessName, Department, Location, DowntimeHours, ProcessDate)
+            VALUES (%s, %s, %s, %s, %s)
+        """, clean_row)
 
-    dim_process.to_csv(OUTPUT_PROCESS, index=False)
-    fact_operations.to_csv(OUTPUT_FACT_OPERATIONS, index=False)
+    conn.commit()
 
-    log_etl_run("dim_process", "clean_transform", len(dim_process))
-    log_etl_run("fact_operations", "clean_transform", len(fact_operations))
+    # Load into dim_process
+    cursor.execute("""
+        INSERT IGNORE INTO dim_process (processname)
+        SELECT DISTINCT ProcessName
+        FROM staging_operations
+    """)
+
+    # Load into dim_location
+    cursor.execute("""
+        INSERT IGNORE INTO dim_location (location)
+        SELECT DISTINCT Location
+        FROM staging_operations
+    """)
+
+    # Load into fact_operations
+    cursor.execute("""
+        INSERT INTO fact_operations (processid, locationid, departmentid, downtimehours, datekey)
+        SELECT 
+            p.processid,
+            l.locationid,
+            d.departmentid,
+            s.DowntimeHours,
+            DATE_FORMAT(s.ProcessDate, '%Y%m%d')
+        FROM staging_operations s
+        JOIN dim_process p ON s.ProcessName = p.processname
+        JOIN dim_location l ON s.Location = l.location
+        JOIN dim_department d ON s.Department = d.department
+    """)
+
+    conn.commit()
+    print("Operations ETL completed successfully.")
+
+    cursor.close()
+    conn.close()
 
 if __name__ == "__main__":
-    clean_operations_data()
-    print("Operations ETL complete.")
+    operations_etl()
