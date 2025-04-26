@@ -1,6 +1,7 @@
 import pandas as pd
 import mysql.connector
 import configparser
+from audit_logger import log_audit_event  #  Added import
 
 def operations_etl():
     # Load database config
@@ -22,14 +23,9 @@ def operations_etl():
     df['Department'] = df['Department'].astype(str).str.strip().str.upper()
     df['Location'] = df['Location'].astype(str).str.strip().str.title()
     df['DowntimeHours'] = pd.to_numeric(df['DowntimeHours'], errors='coerce')
-
-    # 🚨 NEW CLEANING: Remove rows with blank ProcessName, Department, or Location
     df = df[(df['ProcessName'].str.strip() != '') & (df['Department'].str.strip() != '') & (df['Location'].str.strip() != '')]
-
-    # Drop rows where critical columns are missing
     df.dropna(subset=['ProcessName', 'Department', 'Location', 'DowntimeHours'], inplace=True)
 
-    # Parse ProcessDate
     def parse_dates(date_str):
         try:
             return pd.to_datetime(date_str)
@@ -73,6 +69,8 @@ def operations_etl():
         SELECT DISTINCT ProcessName
         FROM staging_operations
     """)
+    conn.commit()
+    log_audit_event('dim_process', 'INSERT', cursor.rowcount)  #  Audit log
 
     # Load into dim_location
     cursor.execute("""
@@ -80,6 +78,8 @@ def operations_etl():
         SELECT DISTINCT Location
         FROM staging_operations
     """)
+    conn.commit()
+    log_audit_event('dim_location', 'INSERT', cursor.rowcount)  # Audit log
 
     # Load into fact_operations
     cursor.execute("""
@@ -95,8 +95,9 @@ def operations_etl():
         JOIN dim_location l ON s.Location = l.location
         JOIN dim_department d ON s.Department = d.department
     """)
-
     conn.commit()
+    log_audit_event('fact_operations', 'INSERT', cursor.rowcount)  #  Audit log
+
     print("Operations ETL completed successfully.")
 
     cursor.close()

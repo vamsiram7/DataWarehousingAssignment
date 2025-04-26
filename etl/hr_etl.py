@@ -1,6 +1,7 @@
 import pandas as pd
 import mysql.connector
 import configparser
+from audit_logger import log_audit_event  # Added import
 
 def hr_etl():
     # Load database config
@@ -73,12 +74,16 @@ def hr_etl():
         SELECT DISTINCT Department
         FROM staging_hr
     """)
+    conn.commit()
+    log_audit_event('dim_department', 'INSERT', cursor.rowcount)  # Audit log
 
     cursor.execute("""
         INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
         SELECT DISTINCT EmployeeID, Name, Gender, ManagerID
         FROM staging_hr
     """)
+    conn.commit()
+    log_audit_event('dim_employee', 'INSERT', cursor.rowcount)  # Audit log
 
     # Load into fact_hr
     cursor.execute("""
@@ -92,8 +97,9 @@ def hr_etl():
         FROM staging_hr s
         JOIN dim_department d ON s.Department = d.department
     """)
-
     conn.commit()
+    log_audit_event('fact_hr', 'INSERT', cursor.rowcount)  # Audit log
+
     print("HR ETL completed successfully.")
 
     cursor.close()

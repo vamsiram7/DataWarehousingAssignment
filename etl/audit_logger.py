@@ -1,9 +1,9 @@
 import mysql.connector
 import configparser
-from datetime import datetime
 
+# Read database config
 config = configparser.ConfigParser()
-config.read("sql/db_config.ini")
+config.read('sql/db_config.ini')
 
 DB_CONFIG = {
     "host": config['mysql']['host'],
@@ -12,25 +12,20 @@ DB_CONFIG = {
     "database": config['mysql']['database']
 }
 
-def log_etl_run(table_name, action, records_inserted, status="success"):
+def log_audit_event(table_name, operation_type, row_count):
+    """Logs an audit event into the audit_log table."""
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS audit_log (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            table_name VARCHAR(100),
-            action VARCHAR(100),
-            records_inserted INT,
-            status VARCHAR(20),
-            timestamp DATETIME
-        )
-    """)
-
-    cursor.execute("""
-        INSERT INTO audit_log (table_name, action, records_inserted, status, timestamp)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (table_name, action, records_inserted, status, datetime.now()))
-
+    insert_query = """
+        INSERT INTO audit_log (operation_type, table_name, row_count)
+        VALUES (%s, %s, %s)
+    """
+    cursor.execute(insert_query, (operation_type, table_name, row_count))
     conn.commit()
+
+    cursor.close()
     conn.close()
+
+if __name__ == "__main__":
+    print("Audit Logger ready.")

@@ -1,7 +1,6 @@
 -- Create Database
 CREATE DATABASE IF NOT EXISTS organizational_insights;
 USE organizational_insights;
-
 -- ====================
 -- Dimension Tables
 -- ====================
@@ -69,4 +68,28 @@ CREATE TABLE fact_operations (
     FOREIGN KEY (processid) REFERENCES dim_process(processid),
     FOREIGN KEY (locationid) REFERENCES dim_location(locationid),
     FOREIGN KEY (departmentid) REFERENCES dim_department(departmentid)
+);
+-- ====================
+-- SCD Table
+-- ====================
+
+CREATE TABLE dim_employee_scd2 (
+    employeeid INT,
+    name VARCHAR(255),
+    gender VARCHAR(255),
+    managerid INT,
+    startdate DATE,
+    enddate DATE,
+    iscurrent TINYINT,
+    status VARCHAR(255),
+    PRIMARY KEY (employeeid, startdate)
+);
+
+-- Create audit_log table
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    operation_type VARCHAR(255),
+    table_name VARCHAR(255),
+    row_count INT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );

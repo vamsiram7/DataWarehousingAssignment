@@ -1,7 +1,6 @@
 import pandas as pd
 import mysql.connector
 import configparser
-from audit_logger import log_etl_run
 
 # Load DB config
 config = configparser.ConfigParser()
@@ -14,79 +13,75 @@ DB_CONFIG = {
     "database": config['mysql']['database']
 }
 
-def apply_incremental_load(input_path, table_name, key_columns):
+def incremental_insert(staging_table, target_table, natural_keys, insert_columns, foreign_key_check=None):
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor()
 
-    new_data = pd.read_csv(input_path)
-    new_data.dropna(how='all', inplace=True)
+    # Read data
+    staging = pd.read_sql(f"SELECT * FROM {staging_table}", conn)
+    target = pd.read_sql(f"SELECT * FROM {target_table}", conn)
 
-    try:
-        cursor.execute(f"SELECT * FROM {table_name}")
-        existing_data = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
-    except:
-        for _, row in new_data.iterrows():
-            placeholders = ", ".join(["%s"] * len(row))
-            columns = ", ".join(new_data.columns)
-            insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            cursor.execute(insert_query, tuple(row))
-        conn.commit()
-        log_etl_run(table_name, "initial_load", len(new_data))
-        conn.close()
-        return
+    staging.columns = staging.columns.str.lower()
+    target.columns = target.columns.str.lower()
 
-    # Normalize key columns (string cleanup and date parsing)
-    for col in key_columns:
-        if col in new_data.columns:
-            if new_data[col].dtype == 'object':
-                new_data[col] = new_data[col].astype(str).str.strip().str.upper()
-            if 'date' in col.lower():
-                try:
-                    new_data[col] = pd.to_datetime(new_data[col])
-                except Exception:
-                    pass
+    print(f"Loading: {staging_table} -> {target_table}")
 
-        if col in existing_data.columns:
-            if existing_data[col].dtype == 'object':
-                existing_data[col] = existing_data[col].astype(str).str.strip().str.upper()
-            if 'date' in col.lower():
-                try:
-                    existing_data[col] = pd.to_datetime(existing_data[col])
-                except Exception:
-                    pass
+    # --- NEW foreign key validation here ---
+    if foreign_key_check:
+        foreign_table, foreign_column = foreign_key_check
+        foreign_df = pd.read_sql(f"SELECT {foreign_column} FROM {foreign_table}", conn)
+        foreign_list = foreign_df[foreign_column.lower()].dropna().unique().tolist()
+        
+        # Keep only rows where employeeid exists in dim_employee
+        staging = staging[staging[foreign_column.lower()].isin(foreign_list)]
 
-    merged = new_data.merge(
-        existing_data,
-        on=key_columns,
-        how='left',
-        indicator=True
-    )
-
-    delta = merged[merged['_merge'] == 'left_only']
-    final_new_data = new_data.loc[delta.index]
-
-    if not final_new_data.empty:
-        print(f"New rows for {table_name}:")
-        print(final_new_data)
-
-        for _, row in final_new_data.iterrows():
-            placeholders = ", ".join(["%s"] * len(row))
-            columns = ", ".join(final_new_data.columns)
-            insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            cursor.execute(insert_query, tuple(row))
-        conn.commit()
-        log_etl_run(table_name, "incremental_load", len(final_new_data))
+    if target.empty:
+        new_data = staging
     else:
-        print(f"No new data to insert into {table_name}.")
-        log_etl_run(table_name, "incremental_load", 0)
+        merged = staging.merge(target, on=natural_keys, how='left', indicator=True)
+        new_data = merged[merged['_merge'] == 'left_only']
 
+    if not new_data.empty:
+        for _, row in new_data.iterrows():
+            placeholders = ", ".join(["%s"] * len(insert_columns))
+            columns = ", ".join(insert_columns)
+            sql = f"INSERT INTO {target_table} ({columns}) VALUES ({placeholders})"
+
+            values = [row.get(col.lower(), None) for col in insert_columns]
+            cursor.execute(sql, values)
+
+        conn.commit()
+        print(f"Inserted {len(new_data)} new rows into '{target_table}'.")
+    else:
+        print(f"No new data to insert into '{target_table}'.")
+
+    cursor.close()
     conn.close()
 
+def main():
+    incremental_insert(
+        staging_table="staging_finance",
+        target_table="fact_finance",
+        natural_keys=["employeeid", "expensetypeid", "expenseamount", "datekey"],
+        insert_columns=["employeeid", "expensetypeid", "expenseamount", "approvedby", "datekey"],
+        foreign_key_check=("dim_employee", "employeeid")   # <------ NEW foreign key check
+    )
+
+    incremental_insert(
+        staging_table="staging_hr",
+        target_table="fact_hr",
+        natural_keys=["employeeid", "departmentid", "salary", "datekey"],
+        insert_columns=["employeeid", "departmentid", "salary", "status", "datekey"],
+        foreign_key_check=("dim_employee", "employeeid")    # <------ HR also checks employeeid
+    )
+
+    incremental_insert(
+        staging_table="staging_operations",
+        target_table="fact_operations",
+        natural_keys=["processid", "locationid", "departmentid", "downtimehours", "datekey"],
+        insert_columns=["processid", "locationid", "departmentid", "downtimehours", "datekey"]
+        # No foreign key check needed for operations for employee
+    )
+
 if __name__ == "__main__":
-    apply_incremental_load("outputs/fact_finance.csv", "fact_finance", ["EmployeeID", "ExpenseTypeID", "ExpenseAmount", "DateKey"])
-    apply_incremental_load("outputs/fact_hr.csv", "fact_hr", ["EmployeeID", "DateKey", "Salary", "Status"])
-    apply_incremental_load("outputs/fact_operations.csv", "fact_operations", ["Department", "ProcessID", "DowntimeHours", "DateKey"])
-    apply_incremental_load("outputs/dim_employee.csv", "dim_employee", ["EmployeeID", "Name", "Gender", "DateOfJoining", "ManagerID"])
-    apply_incremental_load("outputs/dim_expensetype.csv", "dim_expensetype", ["ExpenseTypeID", "ExpenseTypeName"])
-    apply_incremental_load("outputs/dim_process.csv", "dim_process", ["ProcessID", "ProcessName"])
-    apply_incremental_load("outputs/dim_department.csv", "dim_department", ["DepartmentID", "DepartmentName"])
+    main()

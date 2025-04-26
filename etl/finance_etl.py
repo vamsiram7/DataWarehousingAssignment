@@ -1,6 +1,7 @@
 import pandas as pd
 import mysql.connector
 import configparser
+from audit_logger import log_audit_event  #  Added import
 
 def finance_etl():
     # Load database config
@@ -22,19 +23,12 @@ def finance_etl():
     df['ExpenseAmount'] = pd.to_numeric(df['ExpenseAmount'], errors='coerce')
     df['ApprovedBy'] = pd.to_numeric(df['ApprovedBy'], errors='coerce')
 
-    # 🚨 NEW CLEANING: Remove empty ExpenseType
     df = df[df['ExpenseType'].str.strip() != '']
-
-    # 🚨 NEW CLEANING: Correct known typos
-    typo_corrections = {
-        'TRAVELL': 'TRAVEL'
-    }
+    typo_corrections = {'TRAVELL': 'TRAVEL'}
     df['ExpenseType'] = df['ExpenseType'].replace(typo_corrections)
 
-    # Drop rows where important columns are missing
     df.dropna(subset=['EmployeeID', 'ExpenseType', 'ExpenseAmount'], inplace=True)
 
-    # Parse ExpenseDate
     def parse_dates(date_str):
         try:
             return pd.to_datetime(date_str)
@@ -78,8 +72,10 @@ def finance_etl():
         SELECT DISTINCT ExpenseType
         FROM staging_finance
     """)
+    conn.commit()
+    log_audit_event('dim_expensetype', 'INSERT', cursor.rowcount)  #  Audit log
 
-    # Load into fact_finance (only valid employeeids)
+    # Load into fact_finance
     cursor.execute("""
         INSERT INTO fact_finance (employeeid, expensetypeid, expenseamount, approvedby, datekey)
         SELECT 
@@ -92,8 +88,9 @@ def finance_etl():
         JOIN dim_expensetype e ON s.ExpenseType = e.expensetype
         JOIN dim_employee de ON s.EmployeeID = de.employeeid
     """)
-
     conn.commit()
+    log_audit_event('fact_finance', 'INSERT', cursor.rowcount)  #  Audit log
+
     print("Finance ETL completed successfully.")
 
     cursor.close()
