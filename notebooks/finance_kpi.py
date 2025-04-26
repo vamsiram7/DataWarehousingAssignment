@@ -16,29 +16,29 @@ DB_CONFIG = {
 # Connect and load tables from MySQL
 conn = mysql.connector.connect(**DB_CONFIG)
 
-fact_fin = pd.read_sql("SELECT * FROM fact_finance", conn)
-dim_exp = pd.read_sql("SELECT * FROM dim_expensetype", conn)
-dim_dept = pd.read_sql("SELECT * FROM dim_department", conn)
+fact_finance = pd.read_sql("SELECT * FROM fact_finance", conn)
+dim_expensetype = pd.read_sql("SELECT * FROM dim_expensetype", conn)
+dim_department = pd.read_sql("SELECT * FROM dim_department", conn)
 fact_hr = pd.read_sql("SELECT * FROM fact_hr", conn)
 
 conn.close()
 
-# Merge fact_finance with dim_expensetype to get ExpenseTypeName
-finance = fact_fin.merge(dim_exp, on='ExpenseTypeID', how='left')
+# Merge fact_finance with dim_expensetype to get expensetype
+finance = fact_finance.merge(dim_expensetype, on='expensetypeid', how='left')
 
-# Merge with fact_hr to get DepartmentID using EmployeeID
-finance = finance.merge(fact_hr[['EmployeeID', 'DepartmentID']], on='EmployeeID', how='left')
+# Merge with fact_hr to get departmentid using employeeid
+finance = finance.merge(fact_hr[['employeeid', 'departmentid']], on='employeeid', how='left')
 
-# Merge with dim_department to get DepartmentName
-finance = finance.merge(dim_dept, on='DepartmentID', how='left')
+# Merge with dim_department to get departmentname
+finance = finance.merge(dim_department, on='departmentid', how='left')
 
 # Convert DateKey to datetime and extract Month
-finance['Date'] = pd.to_datetime(finance['DateKey'], format='%Y%m%d', errors='coerce')
+finance['Date'] = pd.to_datetime(finance['datekey'], format='%Y%m%d', errors='coerce')
 finance = finance[~finance['Date'].isna()]
 finance['Month'] = finance['Date'].dt.to_period('M')
 
-# Group by Month, DepartmentName, and ExpenseTypeName
-monthly_exp_dept_type = finance.groupby(['Month', 'DepartmentName', 'ExpenseTypeName'])['ExpenseAmount'].sum().reset_index()
+# Group by Month, Department, and ExpenseType
+monthly_exp_dept_type = finance.groupby(['Month', 'department', 'expensetype'])['expenseamount'].sum().reset_index()
 
 # Display result
 print("Monthly Expenses by Department and Expense Type:")
