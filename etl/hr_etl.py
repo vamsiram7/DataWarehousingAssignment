@@ -1,10 +1,10 @@
 import pandas as pd
 import mysql.connector
 import configparser
-from audit_logger import log_audit_event  # Added import
+from audit_logger import log_audit_event
+from scd2_employee_etl import initialize_scd2_table, apply_scd2
 
 def hr_etl():
-    # Load database config
     config = configparser.ConfigParser()
     config.read('sql/db_config.ini')
     conn = mysql.connector.connect(
@@ -15,19 +15,17 @@ def hr_etl():
     )
     cursor = conn.cursor()
 
-    # Read HR dirty data
     df = pd.read_excel('./data/HR_Dataset_Dirty.xlsx')
 
-    # Cleaning
     df['Department'] = df['Department'].astype(str).str.strip().str.upper()
     df['Gender'] = df['Gender'].fillna('Unknown')
     df['Salary'] = df['Salary'].fillna(df['Salary'].median())
     df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
     df.dropna(subset=['EmployeeID', 'Department'], inplace=True)
 
-    def parse_dates(date_str):
+    def parse_dates(x):
         try:
-            return pd.to_datetime(date_str)
+            return pd.to_datetime(x)
         except:
             return pd.NaT
 
@@ -35,7 +33,6 @@ def hr_etl():
     df = df[~df['DateOfJoining'].isnull()]
     df.drop_duplicates(inplace=True)
 
-    # Create staging table
     cursor.execute("DROP TABLE IF EXISTS staging_hr")
     cursor.execute("""
         CREATE TABLE staging_hr (
@@ -51,56 +48,58 @@ def hr_etl():
     """)
 
     for _, row in df.iterrows():
-        clean_row = (
-            int(row['EmployeeID']) if not pd.isna(row['EmployeeID']) else None,
-            row['Name'],
-            row['Gender'],
-            int(row['ManagerID']) if not pd.isna(row['ManagerID']) else None,
-            row['Department'],
-            float(row['Salary']) if not pd.isna(row['Salary']) else None,
-            row['Status'],
-            row['DateOfJoining'] if not pd.isna(row['DateOfJoining']) else None
-        )
         cursor.execute("""
             INSERT INTO staging_hr (EmployeeID, Name, Gender, ManagerID, Department, Salary, Status, DateOfJoining)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, clean_row)
-
+        """, (
+            int(row['EmployeeID']),
+            row['Name'],
+            row['Gender'],
+            int(row['ManagerID']) if pd.notna(row['ManagerID']) else None,
+            row['Department'],
+            float(row['Salary']),
+            row['Status'],
+            row['DateOfJoining']
+        ))
     conn.commit()
 
-    # Load into dimension tables
     cursor.execute("""
         INSERT IGNORE INTO dim_department (department)
-        SELECT DISTINCT Department
-        FROM staging_hr
+        SELECT DISTINCT department FROM staging_hr
+        WHERE department NOT IN (SELECT department FROM dim_department)
     """)
     conn.commit()
-    log_audit_event('dim_department', 'INSERT', cursor.rowcount)  # Audit log
+    log_audit_event('dim_department', 'INCREMENTAL_INSERT', cursor.rowcount)
 
     cursor.execute("""
         INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
-        SELECT DISTINCT EmployeeID, Name, Gender, ManagerID
-        FROM staging_hr
+        SELECT DISTINCT employeeid, name, gender, managerid FROM staging_hr
+        WHERE employeeid NOT IN (SELECT employeeid FROM dim_employee)
     """)
     conn.commit()
-    log_audit_event('dim_employee', 'INSERT', cursor.rowcount)  # Audit log
+    log_audit_event('dim_employee', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-    # Load into fact_hr
     cursor.execute("""
         INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
         SELECT 
-            s.EmployeeID,
+            s.employeeid,
             d.departmentid,
-            s.Salary,
-            s.Status,
-            DATE_FORMAT(s.DateOfJoining, '%Y%m%d')
+            s.salary,
+            s.status,
+            DATE_FORMAT(s.dateofjoining, '%Y%m%d')
         FROM staging_hr s
-        JOIN dim_department d ON s.Department = d.department
+        JOIN dim_department d ON s.department = d.department
+        LEFT JOIN fact_hr f ON f.employeeid = s.employeeid AND f.datekey = DATE_FORMAT(s.dateofjoining, '%Y%m%d')
+        WHERE f.employeeid IS NULL
     """)
     conn.commit()
-    log_audit_event('fact_hr', 'INSERT', cursor.rowcount)  # Audit log
+    log_audit_event('fact_hr', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-    print("HR ETL completed successfully.")
+    # SCD2 Handling here
+    initialize_scd2_table(cursor)
+    apply_scd2(cursor, conn)
+
+    print("HR ETL completed successfully including SCD2 update.")
 
     cursor.close()
     conn.close()

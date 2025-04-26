@@ -1,10 +1,9 @@
 import pandas as pd
 import mysql.connector
 import configparser
-from audit_logger import log_audit_event  #  Added import
+from audit_logger import log_audit_event
 
 def operations_etl():
-    # Load database config
     config = configparser.ConfigParser()
     config.read('sql/db_config.ini')
     conn = mysql.connector.connect(
@@ -15,20 +14,19 @@ def operations_etl():
     )
     cursor = conn.cursor()
 
-    # Read Operations dirty data
     df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
 
-    # Basic cleaning
     df['ProcessName'] = df['ProcessName'].astype(str).str.strip().str.upper()
     df['Department'] = df['Department'].astype(str).str.strip().str.upper()
     df['Location'] = df['Location'].astype(str).str.strip().str.title()
     df['DowntimeHours'] = pd.to_numeric(df['DowntimeHours'], errors='coerce')
+
     df = df[(df['ProcessName'].str.strip() != '') & (df['Department'].str.strip() != '') & (df['Location'].str.strip() != '')]
     df.dropna(subset=['ProcessName', 'Department', 'Location', 'DowntimeHours'], inplace=True)
 
-    def parse_dates(date_str):
+    def parse_dates(x):
         try:
-            return pd.to_datetime(date_str)
+            return pd.to_datetime(x)
         except:
             return pd.NaT
 
@@ -36,7 +34,6 @@ def operations_etl():
     df = df[~df['ProcessDate'].isnull()]
     df.drop_duplicates(inplace=True)
 
-    # Create staging table
     cursor.execute("DROP TABLE IF EXISTS staging_operations")
     cursor.execute("""
         CREATE TABLE staging_operations (
@@ -49,54 +46,51 @@ def operations_etl():
     """)
 
     for _, row in df.iterrows():
-        clean_row = (
-            row['ProcessName'],
-            row['Department'],
-            row['Location'],
-            float(row['DowntimeHours']) if not pd.isna(row['DowntimeHours']) else None,
-            row['ProcessDate'] if not pd.isna(row['ProcessDate']) else None
-        )
         cursor.execute("""
             INSERT INTO staging_operations (ProcessName, Department, Location, DowntimeHours, ProcessDate)
             VALUES (%s, %s, %s, %s, %s)
-        """, clean_row)
-
+        """, (
+            row['ProcessName'],
+            row['Department'],
+            row['Location'],
+            float(row['DowntimeHours']),
+            row['ProcessDate']
+        ))
     conn.commit()
 
-    # Load into dim_process
     cursor.execute("""
         INSERT IGNORE INTO dim_process (processname)
-        SELECT DISTINCT ProcessName
-        FROM staging_operations
+        SELECT DISTINCT processname FROM staging_operations
+        WHERE processname NOT IN (SELECT processname FROM dim_process)
     """)
     conn.commit()
-    log_audit_event('dim_process', 'INSERT', cursor.rowcount)  #  Audit log
+    log_audit_event('dim_process', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-    # Load into dim_location
     cursor.execute("""
         INSERT IGNORE INTO dim_location (location)
-        SELECT DISTINCT Location
-        FROM staging_operations
+        SELECT DISTINCT location FROM staging_operations
+        WHERE location NOT IN (SELECT location FROM dim_location)
     """)
     conn.commit()
-    log_audit_event('dim_location', 'INSERT', cursor.rowcount)  # Audit log
+    log_audit_event('dim_location', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-    # Load into fact_operations
     cursor.execute("""
         INSERT INTO fact_operations (processid, locationid, departmentid, downtimehours, datekey)
         SELECT 
             p.processid,
             l.locationid,
             d.departmentid,
-            s.DowntimeHours,
-            DATE_FORMAT(s.ProcessDate, '%Y%m%d')
+            s.downtimehours,
+            DATE_FORMAT(s.processdate, '%Y%m%d')
         FROM staging_operations s
-        JOIN dim_process p ON s.ProcessName = p.processname
-        JOIN dim_location l ON s.Location = l.location
-        JOIN dim_department d ON s.Department = d.department
+        JOIN dim_process p ON s.processname = p.processname
+        JOIN dim_location l ON s.location = l.location
+        JOIN dim_department d ON s.department = d.department
+        LEFT JOIN fact_operations f ON f.processid = p.processid AND f.locationid = l.locationid AND f.departmentid = d.departmentid AND f.datekey = DATE_FORMAT(s.processdate, '%Y%m%d')
+        WHERE f.processid IS NULL
     """)
     conn.commit()
-    log_audit_event('fact_operations', 'INSERT', cursor.rowcount)  #  Audit log
+    log_audit_event('fact_operations', 'INCREMENTAL_INSERT', cursor.rowcount)
 
     print("Operations ETL completed successfully.")
 
