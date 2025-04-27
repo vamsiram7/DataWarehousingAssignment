@@ -16,25 +16,23 @@ This project implements a data warehousing solution for organizational insights.
 ```
 organizational-insights-data-warehouse/
 ├── data/           # Raw Excel files
-├── outputs/        # Cleaned CSV files (facts and dimensions)
 ├── etl/            # ETL, SCD Type 2, audit logging and incremental scripts
-├── sql/            # SQL view and load scripts
-├── notebooks/      # .py scripts for KPI, SCD Type 2 and audit log
+├── sql/            # SQL db and view scripts
+├── notebooks/      # .py scripts for KPI
 ├── docs/           # schema diagrams or descriptions
 └── README.md       # Project documentation
 ```
 
 ## ETL Pipelines Overview
 
-Each business area has its own ETL script that performs data cleaning, transformation, and loading into star schema format.
-
+Each business area has its own ETL script responsible for data cleaning, transformation, and loading into a star schema format with incremental loading, audit logging and SCD type 2. Additionally, there is a Master ETL script that consolidates the functionality of the individual scripts, performing all tasks in a single workflow.  
+ 
 | Domain     | Script                  | Fact Table        | Dimensions Used                          |
 |------------|-------------------------|-------------------|------------------------------------------|
 | HR         | `etl/hr_etl.py`         | `fact_hr`         | `dim_employee`, `dim_department`         |
 | Finance    | `etl/finance_etl.py`    | `fact_finance`    | `dim_expensetype`                        |
-| Operations | `etl/operations_etl.py` | `fact_operations` | `dim_process`                            |
+| Operations | `etl/operations_etl.py` | `fact_operations` | `dim_process` ,'`dim_location`'          |
 
-All cleaned CSVs are saved in the `/outputs/` folder and loaded into the MySQL database using `sql/load_to_mysql.py`.
 
 ## Star Schema Diagram
 ![Star Schema Diagram](docs/schema_diagram.png)
@@ -55,24 +53,14 @@ Key business metrics were computed using `.py` scripts — located in the `noteb
 
 This project simulates access control by creating SQL views for each user role in the MySQL database.
 
-| Role         | SQL View Name          | Access Permissions            |
-|--------------|------------------------|-------------------------------|
-| HR User      | `view_hr_user`         | Employee data and HR mertics  |
-| Finance User | `view_finance_user`    | Expenses and Financial metrics|
-| Super User   | All views/tables       | Full access to all data       |
+| Role            | SQL View Name             | Access Permissions            |
+|-----------------|---------------------------|-------------------------------|
+| HR User         | `view_hr_user`            | Employee data and HR mertics  |
+| Finance User    | `view_finance_user`       | Expenses and Financial metrics|
+| Operations User | `view_Operations_user`    | Process and Downtime metrics  |
+| Super User      | All views/tables          | Full access to all data       |
 
-Views are defined inside `sql/role_views.sql` and created using:
-- `create_views.py`: Creates role-based SQL views in MySQL
-- `role_access.py`: Prompts user for login credentials and displays role-specific data
-
-## Bonus Features
-
-| Feature             | Script/Notebook                           | Description                                                     |
-|---------------------|-------------------------------------------|-----------------------------------------------------------------|
-| SCD Type 2          | `etl/scd2_employee_etl.py`                | Tracks historical changes in employee data                      |
-| Audit Logging       | `audit_logger.py`, `view_audit_log.py`    | Logs ETL and data load actions                                  |
-| Incremental Loading | `etl/incremental_fact_finance_etl.py`     | Loads only new records incrementally into all supported tables |
-
+Views are defined inside `sql/role_views.sql` and created using `create_views.py`: Creates role-based SQL views in MySQL
 
 ## Setup Instructions
 
@@ -188,27 +176,19 @@ pip install -r requirements.txt
 ### 6.1. Create a Database
 
 Create a new database for your project:
-    
-     
+
      mysql -u root -p
      CREATE DATABASE IF NOT EXISTS organizational_insights;
      
 
 ### 6.2. Run ETL scripts
 
-Run the following ETL scripts to get cleaned fact and dimension tables:
+Run the following ETL script to get cleaned fact and dimension tables loaded into the database:
 ```bash
-python etl/hr_etl.py
-python etl/finance_etl.py
-python etl/operations_etl.py
+python etl/master_etl.py
 ```
-### 6.3. Load cleaned data into MySQL
 
-Run the following script to load the cleaned data into MySQL:
-```bash
-python sql/load_to_mysql.py
-```
-### 6.4. Generate KPI
+### 6.3. Generate KPI
 You can view KPIs by running the following Python scripts:
 
 ```bash
@@ -216,44 +196,8 @@ python notebooks/hr_kpi.py
 python notebooks/finance_kpi.py
 python notebooks/operations_kpi.py
 ```
-### 6.5. Role Based Views
+### 6.4. Role Based Views
 Generate the role-based views in MySQL by running the following script:
 ```bash
 python sql/create_views.py
 ```
-To access data based on user credentials, run the following script:
-```bash
-python sql/role_access.py
-```
-### 6.6. Run Bonus Features
-
-#### 6.6.1. SCD Type 2 for Employee Data
-To apply SCD Type 2 logic for employee data run the following script:
-```bash
-python etl/scd2_employee_etl.py
-```
-To access the SCD Type2 data run the following script:
-```bash
-python notebooks/scd2.py
-```
-
-#### 6.6.2. Audit Logging
-To view the Audit Log run the following script
-```bash
-python notebooks/view_audit_log.py
-```
-
-#### 6.6.3. Incremental Loading
-To load new data incrementally into all supported tables:
-1. Add new records to any of the following
-   `outputs/fact_finance.csv`
-   `outputs/fact_hr.csv`
-   `outputs/fact_operations.csv`
-   `outputs/dim_employee.csv`
-   `outputs/dim_expensetype.csv`
-   `outputs/dim_process.csv`
-   `outputs/dim_department.csv`
-2. Run the script:
-   ```bash
-   python etl/incremental_loader.py
-   ```

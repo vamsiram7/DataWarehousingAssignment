@@ -101,10 +101,9 @@ def apply_scd2(cursor, conn):
         else:
             # Compare fields
             if (current_record[0] != latest[0]) or (current_record[1] != latest[1]) or (current_record[2] != latest[2]) or (current_record[3] != latest[3]):
-                # If any change, close old record and insert new
                 old_startdate = current_record[4]
 
-                # Close old record
+                # 1. Close old record
                 cursor.execute("""
                     UPDATE dim_employee_scd2
                     SET enddate = %s, iscurrent = 0
@@ -114,8 +113,9 @@ def apply_scd2(cursor, conn):
                     emp_id,
                     old_startdate
                 ))
+                conn.commit()
 
-                # Insert new current record
+                # 2. Insert new current record
                 cursor.execute("""
                     INSERT INTO dim_employee_scd2 (employeeid, name, gender, managerid, startdate, enddate, iscurrent, status)
                     VALUES (%s, %s, %s, %s, %s, NULL, 1, %s)
@@ -129,7 +129,7 @@ def apply_scd2(cursor, conn):
                 ))
                 conn.commit()
             else:
-                # No change detected: Do nothing
+                # No changes detected, do nothing
                 pass
 
     print("SCD2 application completed.")

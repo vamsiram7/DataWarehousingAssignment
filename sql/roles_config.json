@@ -1,5 +1,6 @@
 {
     "admin": {"role": "Super", "password": "Admin_user@123"},
     "hr_user": {"role": "HR", "password": "Hr_user@123"},
-    "finance_user": {"role": "Finance", "password": "Finance_user@123"}
+    "finance_user": {"role": "Finance", "password": "Finance_user@123"},
+    "operations_user": {"role": "Operations", "password": "Operations_user@123"},
 }
