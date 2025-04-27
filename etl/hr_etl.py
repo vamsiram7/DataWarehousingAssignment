@@ -2,7 +2,7 @@ import pandas as pd
 import mysql.connector
 import configparser
 from audit_logger import log_audit_event
-from scd2_employee_etl import initialize_scd2_table, apply_scd2
+from apply_scd2 import initialize_scd2_table, apply_scd2
 
 def hr_etl():
     config = configparser.ConfigParser()
@@ -73,11 +73,26 @@ def hr_etl():
 
     cursor.execute("""
         INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
-        SELECT DISTINCT employeeid, name, gender, managerid FROM staging_hr
+        SELECT DISTINCT employeeid, name, gender, managerid
+        FROM staging_hr
         WHERE employeeid NOT IN (SELECT employeeid FROM dim_employee)
     """)
     conn.commit()
     log_audit_event('dim_employee', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        UPDATE dim_employee de
+        JOIN staging_hr s ON de.employeeid = s.employeeid
+        SET
+            de.name = s.name,
+            de.gender = s.gender,
+            de.managerid = s.managerid
+        WHERE
+            de.name <> s.name
+            OR de.gender <> s.gender
+            OR de.managerid <> s.managerid
+    """)
+    conn.commit()
 
     cursor.execute("""
         INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)

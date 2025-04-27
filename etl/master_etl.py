@@ -3,6 +3,7 @@ import mysql.connector
 import configparser
 import subprocess
 from audit_logger import log_audit_event
+from apply_scd2 import initialize_scd2_table, apply_scd2
 
 # --- Load DB Config ---
 config = configparser.ConfigParser()
@@ -65,41 +66,6 @@ def load_staging_hr(cursor, conn):
         ))
     conn.commit()
 
-def incremental_hr(cursor, conn):
-    print("Incrementally loading HR data...")
-
-    cursor.execute("""
-        INSERT IGNORE INTO dim_department (department)
-        SELECT DISTINCT department FROM staging_hr
-        WHERE department NOT IN (SELECT department FROM dim_department)
-    """)
-    conn.commit()
-    log_audit_event('dim_department', 'INCREMENTAL_INSERT', cursor.rowcount)
-
-    cursor.execute("""
-        INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
-        SELECT DISTINCT employeeid, name, gender, managerid FROM staging_hr
-        WHERE employeeid NOT IN (SELECT employeeid FROM dim_employee)
-    """)
-    conn.commit()
-    log_audit_event('dim_employee', 'INCREMENTAL_INSERT', cursor.rowcount)
-
-    cursor.execute("""
-        INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
-        SELECT 
-            s.employeeid,
-            d.departmentid,
-            s.salary,
-            s.status,
-            DATE_FORMAT(s.dateofjoining, '%Y%m%d')
-        FROM staging_hr s
-        JOIN dim_department d ON s.department = d.department
-        LEFT JOIN fact_hr f ON f.employeeid = s.employeeid AND f.datekey = DATE_FORMAT(s.dateofjoining, '%Y%m%d')
-        WHERE f.employeeid IS NULL
-    """)
-    conn.commit()
-    log_audit_event('fact_hr', 'INCREMENTAL_INSERT', cursor.rowcount)
-
 def load_staging_finance(cursor, conn):
     print("Loading staging_finance...")
     df = pd.read_excel('./data/Finance_Dataset_Dirty.xlsx')
@@ -148,34 +114,6 @@ def load_staging_finance(cursor, conn):
         ))
     conn.commit()
 
-def incremental_finance(cursor, conn):
-    print("Incrementally loading Finance data...")
-
-    cursor.execute("""
-        INSERT IGNORE INTO dim_expensetype (expensetype)
-        SELECT DISTINCT expensetype FROM staging_finance
-        WHERE expensetype NOT IN (SELECT expensetype FROM dim_expensetype)
-    """)
-    conn.commit()
-    log_audit_event('dim_expensetype', 'INCREMENTAL_INSERT', cursor.rowcount)
-
-    cursor.execute("""
-        INSERT INTO fact_finance (employeeid, expensetypeid, expenseamount, approvedby, datekey)
-        SELECT 
-            s.employeeid,
-            e.expensetypeid,
-            s.expenseamount,
-            s.approvedby,
-            DATE_FORMAT(s.expensedate, '%Y%m%d')
-        FROM staging_finance s
-        JOIN dim_expensetype e ON s.expensetype = e.expensetype
-        JOIN dim_employee de ON s.employeeid = de.employeeid
-        LEFT JOIN fact_finance f ON f.employeeid = s.employeeid AND f.expensetypeid = e.expensetypeid AND f.datekey = DATE_FORMAT(s.expensedate, '%Y%m%d')
-        WHERE f.employeeid IS NULL
-    """)
-    conn.commit()
-    log_audit_event('fact_finance', 'INCREMENTAL_INSERT', cursor.rowcount)
-
 def load_staging_operations(cursor, conn):
     print("Loading staging_operations...")
     df = pd.read_excel('./data/Operations_Dataset_Dirty.xlsx')
@@ -222,6 +160,84 @@ def load_staging_operations(cursor, conn):
         ))
     conn.commit()
 
+def incremental_hr(cursor, conn):
+    print("Incrementally loading HR data...")
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_department (department)
+        SELECT DISTINCT department FROM staging_hr
+        WHERE department NOT IN (SELECT department FROM dim_department)
+    """)
+    conn.commit()
+    log_audit_event('dim_department', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_employee (employeeid, name, gender, managerid)
+        SELECT DISTINCT employeeid, name, gender, managerid
+        FROM staging_hr
+        WHERE employeeid NOT IN (SELECT employeeid FROM dim_employee)
+    """)
+    conn.commit()
+    log_audit_event('dim_employee', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        UPDATE dim_employee de
+        JOIN staging_hr s ON de.employeeid = s.employeeid
+        SET
+            de.name = s.name,
+            de.gender = s.gender,
+            de.managerid = s.managerid
+        WHERE
+            de.name <> s.name
+            OR de.gender <> s.gender
+            OR de.managerid <> s.managerid
+    """)
+    conn.commit()
+
+    cursor.execute("""
+        INSERT INTO fact_hr (employeeid, departmentid, salary, status, datekey)
+        SELECT 
+            s.employeeid,
+            d.departmentid,
+            s.salary,
+            s.status,
+            DATE_FORMAT(s.dateofjoining, '%Y%m%d')
+        FROM staging_hr s
+        JOIN dim_department d ON s.department = d.department
+        LEFT JOIN fact_hr f ON f.employeeid = s.employeeid AND f.datekey = DATE_FORMAT(s.dateofjoining, '%Y%m%d')
+        WHERE f.employeeid IS NULL
+    """)
+    conn.commit()
+    log_audit_event('fact_hr', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+def incremental_finance(cursor, conn):
+    print("Incrementally loading Finance data...")
+
+    cursor.execute("""
+        INSERT IGNORE INTO dim_expensetype (expensetype)
+        SELECT DISTINCT expensetype FROM staging_finance
+        WHERE expensetype NOT IN (SELECT expensetype FROM dim_expensetype)
+    """)
+    conn.commit()
+    log_audit_event('dim_expensetype', 'INCREMENTAL_INSERT', cursor.rowcount)
+
+    cursor.execute("""
+        INSERT INTO fact_finance (employeeid, expensetypeid, expenseamount, approvedby, datekey)
+        SELECT 
+            s.employeeid,
+            e.expensetypeid,
+            s.expenseamount,
+            s.approvedby,
+            DATE_FORMAT(s.expensedate, '%Y%m%d')
+        FROM staging_finance s
+        JOIN dim_expensetype e ON s.expensetype = e.expensetype
+        JOIN dim_employee de ON s.employeeid = de.employeeid
+        LEFT JOIN fact_finance f ON f.employeeid = s.employeeid AND f.expensetypeid = e.expensetypeid AND f.datekey = DATE_FORMAT(s.expensedate, '%Y%m%d')
+        WHERE f.employeeid IS NULL
+    """)
+    conn.commit()
+    log_audit_event('fact_finance', 'INCREMENTAL_INSERT', cursor.rowcount)
+
 def incremental_operations(cursor, conn):
     print("Incrementally loading Operations data...")
 
@@ -259,9 +275,10 @@ def incremental_operations(cursor, conn):
     conn.commit()
     log_audit_event('fact_operations', 'INCREMENTAL_INSERT', cursor.rowcount)
 
-def run_scd2():
+def run_scd2(cursor, conn):
     print("Running SCD2 process...")
-    subprocess.run(["python", "etl/scd2_employee_etl.py"])
+    initialize_scd2_table(cursor)
+    apply_scd2(cursor, conn)
 
 if __name__ == "__main__":
     conn = mysql.connector.connect(**DB_CONFIG)
@@ -276,8 +293,8 @@ if __name__ == "__main__":
     load_staging_operations(cursor, conn)
     incremental_operations(cursor, conn)
 
-    run_scd2()
+    run_scd2(cursor, conn)
 
     cursor.close()
     conn.close()
-    print("All incremental loading completed successfully.")
+    print("All ETL and SCD2 processes completed successfully.")
